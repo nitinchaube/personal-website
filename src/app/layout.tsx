@@ -1,7 +1,7 @@
 import Nav from '../components/nav';
 
 export const metadata = {
-  title: 'Darshee | Portifolio',
+  title: 'Nitin | Portifolio',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
