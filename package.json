@@ -1,7 +1,6 @@
 {
   "name": "personal-website",
   "version": "0.1.0",
-  "homepage": "https://github.com/nitinchaube/personal-website",
   "scripts": {
     "dev": "next dev",
     "build": "next build && next export",
