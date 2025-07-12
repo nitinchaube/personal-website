@@ -4,6 +4,8 @@ import tiaa from '../../public/icons/companies/tiaa.svg';
 import robocon from '../../public/icons/companies/robocon.jpeg';
 import cc from '../../public/icons/companies/CC.jpeg';
 import keosworld from '../../public/icons/tech/keosworld.jpeg';
+import Dig from "../../public/icons/tech/Dig.png"
+import Advisor from "../../public/icons/tech/Advisor.png"
 
 
 // Projects
@@ -412,11 +414,9 @@ export const experiences = [
     icon: stevens,
     date: 'Jan 2025 – Present',
     points: [
-      'Assist in teaching core Data Structures concepts in Java including arrays, linked lists, stacks, queues, trees, heaps, graphs, and hash tables.',
-      'Conduct lab sessions and walkthroughs to help students implement data structures and understand their time and space complexities.',
-      'Hold weekly office hours to resolve doubts, review logic, and guide students in debugging and improving their solutions.',
-      'Grade assignments, coding tasks, and exams with detailed feedback to help students improve their understanding.',
-      'Collaborate with the professor to maintain course flow, assist during exams, and ensure a smooth learning experience.'
+      'Led weekly lab sessions for graduate-level Data Structures, guided more than 20+ students through complex coding exercises and practical applications of fundamental algorithms like sorting, searching, graph traversals, etc.',
+"Provided in-depth, individualized support to students, by debugging code and clarifying challenging concepts (e.g., recursion, bit manipulation, tree structures, hash tables), which enhanced their independent data structure skills by 60%.",
+"Collaborated directly with the professor on assignment development, grading of 80% of assignments, and course material, ensuring accurate student progress tracking and provided constructive feedback that enhanced student engagement and their skills."
     ],
   },
   {
@@ -425,11 +425,11 @@ export const experiences = [
     icon: tiaa,
     date: 'Aug 2021 – Aug 2023',
     points: [
-      'Automated production support tasks using Python, reducing manual efforts by 70% and enhancing production stability.',
-      'Worked on Proof-of-Concepts (PoCs) with deep learning models to classify and assign issue tickets, achieving 94% classification accuracy and significantly improving turnaround time.',
-      'Gained hands-on experience across full-stack tech including Java, Angular, and Hadoop; used Splunk and Dynatrace for log analysis and monitoring.',
-      'Progressed from Trainee Support Analyst to Software Developer Analyst within a year through consistent delivery and initiative.',
-      'Collaborated with cross-functional teams to enhance performance and stability of TIAA’s key financial products and services.'
+      "Built and deployed end-to-end machine learning pipelines using Python and NLP model like BERT to automate daily incident workflows across teams. As a result, operational workload was reduced by 70%, and turnaround time for incident classification became negligible.",
+"Collected and trained deep learning model such as Bi-LSTM and BERT for multi-class classification on over 30,000 historical incident logs to classify and route issues automatically, achieving more than 94% accuracy and reducing manual assignments by 80%.",
+"Created natural language processing algorithms to detect and categorize incoming incidents in real time, removing the need for manual triaging and cutting down response times while saving over 100 hours of engineering time.",
+"Used tools like Splunk and Dynatrace to monitor system logs and detect unusual patterns or failures, leading to the identification and resolution of more than 500 high-priority production issues and improving overall system performance.",
+"Worked closely with DevOps, database, and security teams to integrate ML into production workflows and align them with existing monitoring tools. Focused on making the production robust to changing patterns and scalable for 1000 incidents daily."
     ],
   },
   
@@ -507,7 +507,97 @@ export const projects = [
     image: keosworld,
     prodLink: 'https://www.youtube.com/watch?v=JZg64Wgq-54',
     srcLink: 'https://github.com/nitinchaube/KeosWorld/blob/main/README.md',
+  },
+
+  {
+    name: 'Advisor AI',
+    description:
+      "Built an intelligent chatbot using React, Flask, and LangChain, leveraging RAG architecture with ChromaDB for semantic search on college-related queries. Integrated both OpenAI APIs and local LLMs (LLaMA) to reduce API costs by 30%. Designed MongoDB-backed conversational memory and a feedback-driven RLHF loop, boosting response satisfaction by an estimated 15%. Achieved over 90% accuracy in context retrieval via optimized embeddings and IR techniques.",
+    techstack: [
+      {
+        name: 'JavaScript',
+        icon: javascript,
+        link: 'https://developer.mozilla.org/docs/Web/javascript/',
+      },
+      {
+        name: 'Express.js',
+        icon: expressjs,
+        link: 'https://expressjs.com/',
+      },
+      {
+        name: 'MySQL',
+        icon: mysql,
+        link: 'https://mysql.org/',
+      },
+      {
+        name: 'React',
+        icon: react,
+        link: 'https://react.dev/',
+      },
+      {
+        name: 'HTML',
+        icon: html,
+        link: 'https://developer.mozilla.org/docs/Web/HTML/',
+      },
+      {
+        name: 'CSS',
+        icon: css,
+        link: 'https://developer.mozilla.org/docs/Web/CSS/',
+      },
+      {
+        name: 'Firebase',
+        icon: firebase,
+        link: 'https://firebase.google.com/',
+  
+      }
+    ],
+    image: Advisor,
+    prodLink: ' ',
+    srcLink: 'https://github.com/nitinchaube/AdvisorAI',
+  },
+
+  {
+    name: 'DIG : Disaster Information Graph',
+    description:
+      "Analyzed over 500,000 tweets from CrisisLex and CrisisNLP datasets to build an AI system for accurate crisis detection and information extraction. Trained CNN, BiLSTM, and BERT models, achieving 87%+ binary and 82%+ multiclass accuracy for classifying informativeness and disaster types. Integrated OpenAI LLMs for factual information extraction and built a graphical UI to visualize insights, improving data interpretability by 25% for faster disaster response.",
+    techstack: [
+      {
+        name: 'JavaScript',
+        icon: javascript,
+        link: 'https://developer.mozilla.org/docs/Web/javascript/',
+      },
+      {
+        name: 'Express.js',
+        icon: expressjs,
+        link: 'https://expressjs.com/',
+      },
+      {
+        name: 'MySQL',
+        icon: mysql,
+        link: 'https://mysql.org/',
+      },
+      {
+        name: 'React',
+        icon: react,
+        link: 'https://react.dev/',
+      },
+      {
+        name: 'HTML',
+        icon: html,
+        link: 'https://developer.mozilla.org/docs/Web/HTML/',
+      },
+      {
+        name: 'CSS',
+        icon: css,
+        link: 'https://developer.mozilla.org/docs/Web/CSS/',
+      },
+
+    ],
+    image: Dig,
+    prodLink: ' ',
+    srcLink: 'https://github.com/nitinchaube/CrisisInfo',
   }
+
 ];
 
 export const techUsed = [
