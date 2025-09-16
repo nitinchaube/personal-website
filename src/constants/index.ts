@@ -552,7 +552,7 @@ export const projects = [
       }
     ],
     image: Advisor,
-    prodLink: ' ',
+    prodLink: 'https://www.youtube.com/watch?v=1QvQiX8Gv9o',
     srcLink: 'https://github.com/nitinchaube/AdvisorAI',
   },
 
