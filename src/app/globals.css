@@ -28,7 +28,28 @@
   padding: 0;
   box-sizing: border-box;
   scroll-behavior: smooth;
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.section-shell {
+  background: transparent;
+}
+
+.section-shell.tinted {
+  background: var(--color-secondary);
+}
+
+.section-padding {
+  @apply px-6 py-12 sm:px-11 sm:py-14 md:px-16 md:py-16;
 }
 
 .paddingX {

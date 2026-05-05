@@ -6,7 +6,10 @@ import cc from '../../public/icons/companies/CC.jpeg';
 import keosworld from '../../public/icons/tech/keosworld.jpeg';
 import Dig from "../../public/icons/tech/Dig.png"
 import Advisor from "../../public/icons/tech/Advisor.png"
-
+import CIP from "../../public/photos/projects/CIP.png"
+import RUHealthHack from "../../public/photos/projects/RUHealthHack.png"
+import DIGPaper from "../../public/photos/publications/DIG-paper.png"
+import interviewready from "../../public/icons/companies/interview_ready_logo.jpeg"
 
 // Projects
 import simplilearn from '../../public/icons/companies/simplilearn.png';
@@ -97,6 +100,10 @@ export const navLinks = [
   {
     id: 'project',
     title: 'Projects'
+  },
+  {
+    id: 'publications',
+    title: 'Publications',
   },
   {
     id: 'achievements',
@@ -409,172 +416,173 @@ export const services = [
 
 export const experiences = [
   {
-    title: 'Teaching Assistant – Data Structures',
+    title: 'AI Research Engineer',
+    companyName: 'InterviewReady.io',
+    icon: interviewready,
+    date: 'Jan 2026 – Mar 2026',
+    points: [
+      'Implemented agentic patterns including ReAct, Plan-and-Solve, and Reflection into engineering-grade reference architectures for 20,000+ technical learners.',
+      'Translated research on multi-node training and long-context inference into production-ready Python implementations for latency-sensitive applications.',
+      'Designed coding labs for production agents covering multi-agent collaboration, hallucination mitigation, and structured output validation.'
+    ],
+  },
+  {
+    title: 'Teaching Assistant – CS 513 & CS 284',
     companyName: 'Stevens Institute of Technology',
     icon: stevens,
-    date: 'Jan 2025 – Present',
+    date: 'Jan 2025 – May 2025',
     points: [
-      'Led weekly lab sessions for graduate-level Data Structures, guided more than 20+ students through complex coding exercises and practical applications of fundamental algorithms like sorting, searching, graph traversals, etc.',
-"Provided in-depth, individualized support to students, by debugging code and clarifying challenging concepts (e.g., recursion, bit manipulation, tree structures, hash tables), which enhanced their independent data structure skills by 60%.",
-"Collaborated directly with the professor on assignment development, grading of 80% of assignments, and course material, ensuring accurate student progress tracking and provided constructive feedback that enhanced student engagement and their skills."
+      'CS 513: Guided end-to-end ML projects with feature engineering, hyperparameter tuning, cross-validation, and interpretability for a class of 70 students.',
+      'CS 284: Led labs and debugging sessions for 50+ undergraduates on graphs, hashing, recursion, balanced trees, and dynamic programming.',
+      'Collaborated with faculty to improve assignments and help students translate algorithmic thinking into scalable, optimized code.'
     ],
   },
   {
-    title: 'Software Developer Analyst',
-    companyName: 'TIAA',
+    title: 'ML Engineer',
+    companyName: 'Teacher Insurance and Annuity Association of America (TIAA)',
     icon: tiaa,
-    date: 'Aug 2021 – Aug 2023',
+    date: 'Jul 2022 – Aug 2024',
     points: [
-      "Built and deployed end-to-end machine learning pipelines using Python and NLP model like BERT to automate daily incident workflows across teams. As a result, operational workload was reduced by 70%, and turnaround time for incident classification became negligible.",
-"Collected and trained deep learning model such as Bi-LSTM and BERT for multi-class classification on over 30,000 historical incident logs to classify and route issues automatically, achieving more than 94% accuracy and reducing manual assignments by 80%.",
-"Created natural language processing algorithms to detect and categorize incoming incidents in real time, removing the need for manual triaging and cutting down response times while saving over 100 hours of engineering time.",
-"Used tools like Splunk and Dynatrace to monitor system logs and detect unusual patterns or failures, leading to the identification and resolution of more than 500 high-priority production issues and improving overall system performance.",
-"Worked closely with DevOps, database, and security teams to integrate ML into production workflows and align them with existing monitoring tools. Focused on making the production robust to changing patterns and scalable for 1000 incidents daily."
-    ],
-  },
-  
-  {
-    title: 'Vice-Captain & Embedded Systems Developer',
-    companyName: 'Robocon Tech Team',
-    icon: robocon,
-    date: 'Aug 2019 – July 2021',
-    points: [
-      'Led a 20-member interdisciplinary team to design and develop two semi-autonomous robots for the ABU-Robocon competition.',
-      'Wrote embedded C codes to interface with PS3 controllers, enabling multidirectional bot movement with real-time response.',
-      'Integrated physics, electronics, and control systems to reach All India Rank 9 in stage 2 of Robocon.',
-      'Managed team communication, hardware testing, and final deployment strategy under high-pressure deadlines.'
+      'Architected and deployed NLP classification pipelines on AWS to process 30,000+ monthly incident logs with 94% accuracy.',
+      'Built a hybrid incident routing system combining ML predictions with deterministic rules, reducing manual workload by 70% and saving 100+ hours per month.',
+      'Developed fault-tolerant microservices for 1,000+ daily incidents with 99.9% uptime using Kafka-based asynchronous processing.',
+      'Proposed model drift detection and predictive monitoring with Splunk and Dynatrace, helping resolve 500+ critical production issues annually.'
     ],
   },
   {
     title: 'AI Intern',
     companyName: 'Cloud Counselage',
     icon: cc,
-    date: 'Aug 2019 – July 2021',
+    date: 'Aug 2019 – Jul 2021',
     points: [
-      'Led a team of over 15 interns during a two-month internship, managing projects focused on Machine Learning, Natural Language Processing, and Software Testing. Ensured effective collaboration and timely project completion while fostering a productive learning environment.',
-      'Mentored and guided interns in core AI concepts, including feature engineering, model evaluation, and NLP pipelines, cultivating technical expertise and improving team performance throughout the internship period.'
+      'Led a team of 15+ interns across machine learning, NLP, and software testing projects, ensuring strong collaboration and timely delivery.',
+      'Mentored interns on feature engineering, model evaluation, and production-style NLP pipelines to improve technical quality and outcomes.'
     ],
   },
-  
-  
-  
 ];
 
 
 export const projects = [
   {
-    name: 'KeosWorld — E-commerce Platform',
+    name: 'Advisor AI',
     description:
-      "An end-to-end e-commerce web application where users can browse products, manage carts, place orders, and admins can manage inventory. Built with React, Redux, Node.js, Express, MongoDB, and Firebase for auth.",
+      'Architected a multi-node LangGraph StateGraph pipeline with parallel agents, reducing query latency by 65% and achieving sub-2-second responses under concurrent load.',
     techstack: [
       {
-        name: 'JavaScript',
-        icon: javascript,
-        link: 'https://developer.mozilla.org/docs/Web/javascript/',
+        name: 'Python',
+        icon: python,
+        link: 'https://www.python.org/',
       },
       {
-        name: 'Express.js',
-        icon: expressjs,
-        link: 'https://expressjs.com/',
+        name: 'Langchain',
+        icon: langchain,
+        link: 'https://www.langchain.com/',
       },
       {
-        name: 'MySQL',
-        icon: mysql,
-        link: 'https://mysql.org/',
+        name: 'ChromaDB',
+        icon: chromadb,
+        link: 'https://www.trychroma.com/',
       },
       {
-        name: 'React',
-        icon: react,
-        link: 'https://react.dev/',
+        name: 'OpenAI',
+        icon: openai,
+        link: 'https://openai.com/',
       },
       {
-        name: 'HTML',
-        icon: html,
-        link: 'https://developer.mozilla.org/docs/Web/HTML/',
+        name: 'LLaMA 2',
+        icon: llama2,
+        link: 'https://llama.meta.com/llama2/',
       },
       {
-        name: 'CSS',
-        icon: css,
-        link: 'https://developer.mozilla.org/docs/Web/CSS/',
+        name: 'Pinecone',
+        icon: pinecone,
+        link: 'https://www.pinecone.io/',
       },
-      {
-        name: 'Firebase',
-        icon: firebase,
-        link: 'https://firebase.google.com/',
-  
-      }
     ],
-    image: keosworld,
-    prodLink: 'https://www.youtube.com/watch?v=JZg64Wgq-54',
-    srcLink: 'https://github.com/nitinchaube/KeosWorld/blob/main/README.md',
+    image: Advisor,
+    srcLink: 'https://huggingface.co/chauben',
+    prodLink: 'https://www.youtube.com/watch?v=1QvQiX8Gv9o&t=1s',
   },
 
   {
-    name: 'Advisor AI',
+    name: 'Conversation Intelligence Platform',
     description:
-      "Built an intelligent chatbot using React, Flask, and LangChain, leveraging RAG architecture with ChromaDB for semantic search on college-related queries. Integrated both OpenAI APIs and local LLMs (LLaMA) to reduce API costs by 30%. Designed MongoDB-backed conversational memory and a feedback-driven RLHF loop, boosting response satisfaction by an estimated 15%. Achieved over 90% accuracy in context retrieval via optimized embeddings and IR techniques.",
+      "Built an Azure AI contact-center analytics platform with a RAG chatbot, compliance auditor, structured extraction pipeline, and QA workflows, deployable end-to-end with `azd up` and Bicep.",
     techstack: [
       {
-        name: 'JavaScript',
-        icon: javascript,
-        link: 'https://developer.mozilla.org/docs/Web/javascript/',
+        name: 'Azure',
+        icon: azure,
+        link: 'https://azure.microsoft.com/',
       },
       {
-        name: 'Express.js',
-        icon: expressjs,
-        link: 'https://expressjs.com/',
+        name: 'Python',
+        icon: python,
+        link: 'https://www.python.org/',
       },
       {
-        name: 'MySQL',
-        icon: mysql,
-        link: 'https://mysql.org/',
+        name: 'OpenAI',
+        icon: openai,
+        link: 'https://openai.com/',
       },
       {
-        name: 'React',
-        icon: react,
-        link: 'https://react.dev/',
+        name: 'SQL',
+        icon: sql,
+        link: 'https://sql.org/',
       },
       {
-        name: 'HTML',
-        icon: html,
-        link: 'https://developer.mozilla.org/docs/Web/HTML/',
+        name: 'Docker',
+        icon: docker,
+        link: 'https://www.docker.com/',
       },
       {
-        name: 'CSS',
-        icon: css,
-        link: 'https://developer.mozilla.org/docs/Web/CSS/',
+        name: 'GitHub',
+        icon: github,
+        link: 'https://github.com/',
       },
-      {
-        name: 'Firebase',
-        icon: firebase,
-        link: 'https://firebase.google.com/',
-  
-      }
     ],
-    image: Advisor,
-    prodLink: 'https://www.youtube.com/watch?v=1QvQiX8Gv9o',
-    srcLink: 'https://github.com/nitinchaube/AdvisorAI',
+    image: CIP,
+    srcLink: 'https://github.com/nitinchaube/azure-conversation-intelligence-platform',
   },
-
   {
     name: 'DIG : Disaster Information Graph',
     description:
-      "Analyzed over 500,000 tweets from CrisisLex and CrisisNLP datasets to build an AI system for accurate crisis detection and information extraction. Trained CNN, BiLSTM, and BERT models, achieving 87%+ binary and 82%+ multiclass accuracy for classifying informativeness and disaster types. Integrated OpenAI LLMs for factual information extraction and built a graphical UI to visualize insights, improving data interpretability by 25% for faster disaster response.",
+      'Published a disaster response framework combining NLP classification (94.2% accuracy), temporal knowledge graphs for RAG-based event clustering, and streaming analytics for improved situational awareness.',
     techstack: [
       {
-        name: 'JavaScript',
-        icon: javascript,
-        link: 'https://developer.mozilla.org/docs/Web/javascript/',
+        name: 'Python',
+        icon: python,
+        link: 'https://www.python.org/',
       },
       {
-        name: 'Express.js',
-        icon: expressjs,
-        link: 'https://expressjs.com/',
+        name: 'TensorFlow',
+        icon: tensorflow,
+        link: 'https://www.tensorflow.org/',
       },
       {
-        name: 'MySQL',
-        icon: mysql,
-        link: 'https://mysql.org/',
+        name: 'PyTorch',
+        icon: pytorch,
+        link: 'https://pytorch.org/',
+      },
+    ],
+    image: Dig,
+    srcLink: 'https://github.com/nitinchaube/CrisisInfo',
+    prodLink: 'https://tijer.org/tijer/papers/TIJER2309075.pdf',
+  },
+
+  {
+    name: 'MedAI (RU HealthHack)',
+    description:
+      'An AI evaluation assistant for medical education that reviews student H&P presentations and generates formative feedback; implemented as a full-stack app with secure JWT authentication.',
+    techstack: [
+      {
+        name: 'Python',
+        icon: python,
+        link: 'https://www.python.org/',
+      },
+      {
+        name: 'MongoDB',
+        icon: mongodb,
+        link: 'https://www.mongodb.com/',
       },
       {
         name: 'React',
@@ -582,21 +590,20 @@ export const projects = [
         link: 'https://react.dev/',
       },
       {
-        name: 'HTML',
-        icon: html,
-        link: 'https://developer.mozilla.org/docs/Web/HTML/',
+        name: 'JavaScript',
+        icon: javascript,
+        link: 'https://developer.mozilla.org/docs/Web/javascript/',
       },
       {
-        name: 'CSS',
-        icon: css,
-        link: 'https://developer.mozilla.org/docs/Web/CSS/',
+        name: 'Docker',
+        icon: docker,
+        link: 'https://www.docker.com/',
       },
-
     ],
-    image: Dig,
-    prodLink: ' ',
-    srcLink: 'https://github.com/nitinchaube/CrisisInfo',
-  }
+    image: RUHealthHack,
+    srcLink: 'https://github.com/keval-som/RU-HealthHack',
+    prodLink: 'https://www.youtube.com/watch?v=xduMXKOpq18',
+  },
 
 ];
 
@@ -632,33 +639,27 @@ export const techUsed = [
     link: 'https://docs.github.com/',
   },
 ];
-export const achievements = [
-  
-  {
-    achievement:
-      "Conducted research on CrisisLex and CrisisNLP datasets, consolidating over 500,000 crisis-related tweets to build an AI-driven disaster informatics model for accurate crisis classification. ",
-    name: 'FLOOD_KNOW - Information Graph ',
-    designation: 'Research Paper',
-    image: tensorflow,
-    link: 'https://tijer.org/tijer/papers/TIJER2309075.pdf'
-  },
-  {
-    achievement:
-      "I completed the Artificial Intelligence Engineer Master’s Program by Simplilearn in collaboration with IBM, where I gained in-depth knowledge of core AI concepts and their real-world business applications. The program covered a broad spectrum of topics including machine learning, deep learning, natural language processing, and neural networks, equipping me with both theoretical understanding and hands-on experience in building AI-driven solutions.",
-    name: 'Artificial Intelligence Engineer ',
-    designation: 'Certification',
-    image: simplilearn,
-    link: 'https://success.simplilearn.com/e517b81b-00dd-468d-9859-84b5dd18e095#acc.mgAVQ9Mu'
-  },
-  {
-    achievement:
-      "I completed the Competitive Programming certification course from Coding Ninjas, where I developed strong problem-solving skills and a deep understanding of data structures and algorithms. Through consistent practice and hands-on challenges, I sharpened my ability to tackle complex algorithmic problems under time constraints",
-    name: 'Competitive Programming ',
-    designation: 'Certification',
-    image: codingninjas,
-    link: 'https://files.codingninjas.in/certificate11738949934970267154ef6c7eafb2272ed78d5.pdf'
-  },
 
-  
+export const publications = [
+  {
+    publication:
+      'DIG (Disaster Information Graph): Published a comprehensive disaster response framework integrating high-performance NLP classification, temporal knowledge graphs for RAG-based event clustering, and streaming analytics.',
+    title: 'DIG (Disaster Information Graph)',
+    venue: 'Research Paper',
+    image: DIGPaper,
+    srcLink: 'https://github.com/nitinchaube/CrisisInfo',
+    paperLink: 'https://tijer.org/tijer/papers/TIJER2309075.pdf',
+  },
+];
+
+export const achievements = [
+  {
+    achievement:
+      'All-India Rank 9 in ABU ROBOCON, an Asia-specific robotics competition, achieved through interdisciplinary robot design and systems integration.',
+    name: 'ABU ROBOCON',
+    designation: 'Achievement',
+    image: robocon,
+    link: 'https://en.wikipedia.org/wiki/ABU_Robocon'
+  },
 ];
 

@@ -4,7 +4,13 @@ import { staggerContainer } from '../utils/motion';
 import { useEffect } from 'react';
 import fluidHover from '../utils/fluidHover';
 
-const SectionWrapper = (Component: ComponentType, idName: string) => {
+type WrapperOptions = {
+  tinted?: boolean;
+};
+
+const SectionWrapper = (Component: ComponentType, idName: string, options: WrapperOptions = {}) => {
+  const { tinted = false } = options;
+
   const WrappedComponent = (props: any) => {
     useEffect(() => {
       const sectionTitles = document.querySelectorAll('.section-title') as NodeListOf<HTMLElement>;
@@ -19,18 +25,18 @@ const SectionWrapper = (Component: ComponentType, idName: string) => {
       });
     }, []);
     return (
-      <motion.section
-        variants={staggerContainer() as Variants}
-        initial='hidden'
-        whileInView='show'
-        viewport={{ once: true, amount: 0.15 }}
-        className='padding relative z-10 mx-auto max-w-7xl'
-      >
-        <span className='mt-[-100px] block select-none pt-[100px]' id={idName}>
-          &nbsp;
-        </span>
-        <Component {...props} />
-      </motion.section>
+      <div className={`section-shell relative z-10 w-full ${tinted ? 'tinted' : ''}`}>
+        <motion.section
+          id={idName}
+          variants={staggerContainer() as Variants}
+          initial='hidden'
+          whileInView='show'
+          viewport={{ once: true, amount: 0.15 }}
+          className='section-padding mx-auto max-w-7xl scroll-mt-[100px]'
+        >
+          <Component {...props} />
+        </motion.section>
+      </div>
     );
   };
 

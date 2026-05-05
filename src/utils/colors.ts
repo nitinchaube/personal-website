@@ -14,18 +14,18 @@ interface Palette {
 const palettes: Palette[] = [
   {
     light: {
-      textColor: '#000000',
-      backgroundColor: '#FFFFFF',
-      primaryColor: '#4685FF',
-      secondaryColor: '#F2F2F2',
-      accentColor: '#FFB084',
+      textColor: '#0D1117',
+      backgroundColor: '#F6F8FF',
+      primaryColor: '#2563EB',
+      secondaryColor: '#E8EFFE',
+      accentColor: '#60A5FA',
     },
     dark: {
-      textColor: '#FFFFFF',
-      backgroundColor: '#000000',
-      primaryColor: '#4685FF',
-      secondaryColor: '#1A1A1A',
-      accentColor: '#FFB084',
+      textColor: '#E8EFFE',
+      backgroundColor: '#0D1117',
+      primaryColor: '#3B82F6',
+      secondaryColor: '#161D2F',
+      accentColor: '#60A5FA',
     },
   },
   {
@@ -196,8 +196,11 @@ if (typeof window !== 'undefined') {
   storedVariant = localStorage.getItem('variant');
 }
 
-let currentPaletteIndex = storedPalette ? parseInt(storedPalette) : 0;
-let currentVariant = storedVariant || 'light';
+const parsedPaletteIndex = storedPalette ? parseInt(storedPalette, 10) : 0;
+let currentPaletteIndex =
+  Number.isFinite(parsedPaletteIndex) && parsedPaletteIndex >= 0 && parsedPaletteIndex < palettes.length ? parsedPaletteIndex : 0;
+
+let currentVariant = storedVariant === 'dark' ? 'dark' : 'light';
 
 let colors = palettes[currentPaletteIndex][currentVariant];
 

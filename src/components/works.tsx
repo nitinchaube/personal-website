@@ -264,7 +264,7 @@ const Works = () => {
         </motion.p>
       </div>
 
-      <div className='mt-20 flex flex-col items-center gap-7'>
+      <div className='mt-12 flex flex-col items-center gap-7'>
         {projects.map((project, index) => (
           <ProjectCard key={index} index={index} {...project} />
         ))}
@@ -273,4 +273,4 @@ const Works = () => {
   );
 };
 
-export default SectionWrapper(Works, 'project');
+export default SectionWrapper(Works, 'project', { tinted: true });

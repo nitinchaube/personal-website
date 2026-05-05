@@ -3,9 +3,11 @@ import './globals.css';
 import { useEffect, useRef } from 'react';
 import Hero from '../components/hero';
 import About from '../components/about';
+import Skills from '../components/skills';
 import Experience from '../components/experience';
 import Works from '../components/works';
 import Feedbacks from '../components/achievements';
+import Publications from '../components/publications';
 // import Contact from '../components/contact';
 import StarsCanvas from '../components/stars';
 import Foot from '../components/foot';
@@ -65,8 +67,10 @@ const App = () => {
       <div ref={divRef} className='pointer-events-none h-screen-small w-full'>
         <Hero />
         <About />
+        <Skills />
         <Experience />
         <Works />
+        <Publications />
         <Feedbacks />
         <div className='relative z-0'>
           {/* <Contact /> */}

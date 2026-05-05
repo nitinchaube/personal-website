@@ -3,7 +3,7 @@ import { fadeIn } from '../utils/motion';
 
 const HeroSocial = () => {
   return (
-    <div className='mt-5 flex flex-row gap-3'>
+    <div className='mt-5 flex flex-row items-center justify-center gap-4'>
       <motion.a
         href='https://www.linkedin.com/in/nitin-chaube-421572181/'
         target='_blank'
@@ -102,7 +102,26 @@ const HeroSocial = () => {
         </svg>
       </motion.a>
       <motion.a
-        href="mailto:nitinchaube08@gmail.com?subject=Reaching%20Out%20to%20you%20from%20your%20Portfolio&body=Your%20message%20here"
+        href='https://huggingface.co/chauben'
+        target='_blank'
+        rel='noreferrer'
+        className='h-9 w-9 cursor-pointer text-text hover:text-primary focus:text-primary'
+        variants={fadeIn('left', '', 2.8, 0.5) as Variants}
+        initial='hidden'
+        animate='show'
+        whileHover={{ translateY: '-2px' }}
+        transition={{ duration: 0.2 }}
+        aria-label='Hugging Face'
+      >
+        <svg width='100%' height='100%' viewBox='0 0 24 24' className='text-current'>
+          <circle cx='12' cy='12' r='10' fill='currentColor' />
+          <text x='12' y='16' textAnchor='middle' fontSize='9' fill='var(--color-background)' fontFamily='monospace' fontWeight='700'>
+            HF
+          </text>
+        </svg>
+      </motion.a>
+      <motion.a
+        href="mailto:nitinsunilchaube@gmail.com?subject=Reaching%20Out%20to%20you%20from%20your%20Portfolio&body=Your%20message%20here"
         className='ml-auto h-9 w-fit cursor-pointer rounded-[3px] bg-primary px-4 py-[6px] font-semibold text-background transition-[color,box-shadow] duration-200 hover:from-primary hover:to-accent hover:text-text hover:shadow-xl hover:shadow-primary hover:bg-gradient-30 focus:from-primary focus:to-accent focus:text-text focus:shadow-xl focus:shadow-primary focus:bg-gradient-30 xs:ml-0'
         variants={fadeIn('left', '', 3.0, 0.5) as Variants}
         initial='hidden'
