@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { navLinks } from '../constants';
 import MenuButton from '../components/menuButton';
 import MobileMenu from '../components/mobileMenu';
@@ -9,9 +10,24 @@ import { motion, Variants } from 'framer-motion';
 import { fadeIn } from '../utils/motion';
 import { changeVariant, changePalette, isDarkVariant } from '../utils/colors';
 
+// On /notes the minimal NotesNav takes over so we suppress the portfolio Nav entirely.
 const Nav = () => {
+  const pathname = usePathname();
+  const isHome = pathname === '/' || pathname === '';
   const [isDarkMode, setIsDarkMode] = useState(isDarkVariant);
   const [isOpen, setIsOpen] = useState(false);
+
+  const navigateToLink = (link: (typeof navLinks)[number]) => {
+    if ('external_link' in link && link.external_link) {
+      window.open(link.external_link, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if ('route' in link && link.route) {
+      window.location.href = link.route;
+      return;
+    }
+    window.location.href = isHome ? `#${link.id}` : `/#${link.id}`;
+  };
 
   const changeTheme = () => {
     changePalette();
@@ -125,13 +141,16 @@ const Nav = () => {
   };
 
   useEffect(() => {
+    if (pathname?.startsWith('/notes')) return;
     const navElements = document.querySelectorAll('.nav-link');
     for (let i = 0; i < navElements.length; i++) {
       navElements[i].addEventListener('click', () => {
         webGLFluidEnhanced.splats();
       });
     }
-  }, []);
+  }, [pathname]);
+
+  if (pathname?.startsWith('/notes')) return null;
 
   return (
     <nav className='paddingX fixed top-0 z-20 flex w-full items-center bg-secondary py-5 shadow-xl'>
@@ -171,37 +190,24 @@ const Nav = () => {
             <span className='hidden md:block'>Chaube</span>
           </motion.p>
         </Link>
-        <ul className='hidden list-none flex-row gap-10 sm:flex'>
+        <ul className='hidden list-none flex-row items-center gap-10 sm:flex'>
           {navLinks.map((link, index) => (
             <motion.li
               key={link.id}
-              className='nav-link cursor-pointer font-mono text-[18px] font-medium text-text hover:text-primary focus:text-primary'
+              className={
+                link.highlight
+                  ? 'nav-link nav-link--highlight cursor-pointer rounded-full bg-[#111111] px-4 py-1.5 font-mono text-[16px] font-semibold text-white shadow-sm transition-colors hover:bg-[#333333] focus:bg-[#333333]'
+                  : 'nav-link cursor-pointer font-mono text-[18px] font-medium text-text hover:text-primary focus:text-primary'
+              }
               tabIndex={0}
               variants={fadeIn('down', '', index * 0.25, 1) as Variants}
               initial='hidden'
               animate='show'
               whileHover={{ translateY: '-2px' }}
               transition={{ duration: 0.2 }}
-              // onClick={() => (window.location.href = `#${link.id}`)}
-              // onKeyDown={(event) => {
-              //   if (event.key === 'Enter') {
-              //       window.location.href = `#${link.id}`;}
-              // }}
-              onClick={() => {
-                if (link.external_link) {
-                  window.open(link.external_link, '_blank', 'noopener,noreferrer');
-                } else {
-                  window.location.href = `#${link.id}`;
-                }
-              }}
+              onClick={() => navigateToLink(link)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  if (link.external_link) {
-                    window.open(link.external_link, '_blank', 'noopener,noreferrer');
-                  } else {
-                    window.location.href = `#${link.id}`;
-                  }
-                }
+                if (event.key === 'Enter') navigateToLink(link);
               }}
             >
               {link.title}
@@ -226,7 +232,7 @@ const Nav = () => {
           <MenuButton onClick={handleClick} isOpen={isOpen} />
         </motion.div>
       </div>
-      <MobileMenu isOpen={isOpen} onClose={handleMenuItemClick} isDarkMode={isDarkMode} PaletteIcon={PaletteIcon} SunIcon={SunIcon} MoonIcon={MoonIcon} />
+      <MobileMenu isOpen={isOpen} onClose={handleMenuItemClick} isDarkMode={isDarkMode} PaletteIcon={PaletteIcon} SunIcon={SunIcon} MoonIcon={MoonIcon} navigateToLink={navigateToLink} />
     </nav>
   );
 };

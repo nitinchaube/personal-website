@@ -88,11 +88,16 @@ import chromadb from '../../public/icons/tech/chromaDB.svg';
 import mistral from '../../public/icons/tech/mistral.svg';
 import llama2 from '../../public/icons/tech/llama2.svg';
 
-export const navLinks = [
-  {
-    id: 'about',
-    title: 'About'
-  },
+type NavLink = {
+  id: string;
+  title: string;
+  external_link?: string;
+  route?: string;
+  /** When true, renders as a primary-coloured button instead of a plain link. */
+  highlight?: boolean;
+};
+
+export const navLinks: NavLink[] = [
   {
     id: 'work',
     title: 'Work'
@@ -108,6 +113,12 @@ export const navLinks = [
   {
     id: 'achievements',
     title: 'Achievements'
+  },
+  {
+    id: 'notes',
+    title: "Nitin's Desk",
+    route: '/notes',
+    highlight: true,
   },
   {
     id: 'resume',

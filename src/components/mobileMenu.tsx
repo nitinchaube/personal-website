@@ -10,9 +10,10 @@ type MobileMenuProps = {
   PaletteIcon: React.FC<{ tabIndex: number }>;
   SunIcon: React.FC<{ tabIndex: number }>;
   MoonIcon: React.FC<{ tabIndex: number }>;
+  navigateToLink: (link: (typeof navLinks)[number]) => void;
 };
 
-const MobileMenu = ({ isOpen, onClose, isDarkMode, PaletteIcon, SunIcon, MoonIcon }: MobileMenuProps) => {
+const MobileMenu = ({ isOpen, onClose, isDarkMode, PaletteIcon, SunIcon, MoonIcon, navigateToLink }: MobileMenuProps) => {
   useEffect(() => {
     const closeMenuIfOpen = () => {
       if (isOpen) {
@@ -42,7 +43,11 @@ const MobileMenu = ({ isOpen, onClose, isDarkMode, PaletteIcon, SunIcon, MoonIco
         {navLinks.map((link) => (
           <motion.li
             key={link.id}
-            className='nav-link cursor-pointer font-mono text-[18px] font-medium text-text hover:text-primary focus:text-primary'
+            className={
+              link.highlight
+                ? 'nav-link nav-link--highlight inline-block w-fit cursor-pointer rounded-full bg-[#111111] px-4 py-1.5 font-mono text-[16px] font-semibold text-white shadow-sm transition-colors hover:bg-[#333333] focus:bg-[#333333]'
+                : 'nav-link cursor-pointer font-mono text-[18px] font-medium text-text hover:text-primary focus:text-primary'
+            }
             tabIndex={isOpen ? 0 : -1}
             variants={fadeIn('down', '', 0.8, 0.2) as Variants}
             initial='hidden'
@@ -50,11 +55,13 @@ const MobileMenu = ({ isOpen, onClose, isDarkMode, PaletteIcon, SunIcon, MoonIco
             whileHover={{ translateX: '-2px' }}
             transition={{ duration: 0.2 }}
             onClick={() => {
-              window.location.href = `#${link.id}`;
+              navigateToLink(link);
+              onClose();
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
-                window.location.href = `#${link.id}`;
+                navigateToLink(link);
+                onClose();
               }
             }}
           >

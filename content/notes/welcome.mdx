@@ -1,0 +1,66 @@
+---
+title: "Welcome to Nitin's Desk"
+date: 2026-05-13
+summary: "How this corner of the site works, what to expect, and a tour of the markdown features it supports."
+tags: [Snippets]
+draft: false
+---
+
+This is **Nitin's Desk** — a quiet place where I write down things I'm learning. No newsletter, no algorithm, no analytics. Just markdown files in a folder that turn into pages.
+
+## How it works
+
+Every note in this section is a single `.mdx` file under `content/notes/`. I write locally, commit, and GitHub Actions rebuilds the site. New file → new page.
+
+Posts are tagged by intent rather than topic:
+
+- **Foundations** — first-principles explanations I'd want to re-read in a year.
+- **Internals** — how something actually works under the hood.
+- **Snippets** — short notes. A trick, a gotcha, a one-page insight.
+- **Readings** — paper, book, and talk notes.
+- **Playbooks** — repeatable how-tos and checklists.
+- **Lab** — experiments and tinkering that may not pan out.
+
+## What renders nicely
+
+### Code
+
+```python title="attention.py"
+import torch
+
+def scaled_dot_product_attention(q, k, v):
+    d_k = q.shape[-1]
+    scores = q @ k.transpose(-2, -1) / d_k ** 0.5
+    weights = scores.softmax(dim=-1)
+    return weights @ v
+```
+
+### Math
+
+Inline math like $\nabla_\theta J(\theta) = \mathbb{E}\big[\nabla_\theta \log \pi_\theta(a\mid s) \, R\big]$ works.
+
+So do display equations:
+
+$$
+\mathcal{L}_{\text{CE}} = -\sum_{i=1}^{N} y_i \log \hat{y}_i
+$$
+
+### Tables
+
+| Method | Compute | Stability |
+| --- | --- | --- |
+| REINFORCE | low | low |
+| PPO | medium | high |
+| DPO | low | high |
+
+### Images
+
+Drop a screenshot from the clipboard right into the editor — Cursor saves it next to this file and inserts the link automatically. Captions come from the alt text.
+
+### Callouts via blockquote
+
+> A short observation, an aside, or a quote from a paper goes here.
+
+## What this isn't
+
+Polished essays. Posts here are working notes — sometimes incomplete, occasionally wrong, always updated when I learn more.

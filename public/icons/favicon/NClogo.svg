@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="NC monogram">
+  <title>Nitin Chaube</title>
+  <style>
+    path { fill: #111111; }
+    @media (prefers-color-scheme: dark) {
+      path { fill: #f4f4f0; }
+    }
+  </style>
+  <g transform="translate(0, 256) scale(0.0555, -0.0455)">
+    <path d="M600 5000 l0 -4500 400 0 400 0 1000 3000 0 -3000 400 0 400 0 0 4500 -400 0 -400 0 -1000 -3000 0 3000 -400 0 -400 0z"/>
+    <path d="M3000 4900 c-600 -150 -1000 -800 -1000 -1740 0 -930 420 -1520 1100 -1580 310 -30 690 80 900 270 l60 55 -180 330 -60 -50 c-100 -85 -250 -135 -400 -135 -400 0 -660 370 -660 1080 0 720 250 1090 700 1090 170 0 330 -60 440 -170 l70 -70 170 320 -70 60 c-220 190 -660 280 -1070 230z"/>
+  </g>
+</svg>

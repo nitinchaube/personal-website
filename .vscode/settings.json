@@ -1,0 +1,9 @@
+{
+  "markdown.editor.filePaste.enabled": true,
+  "markdown.editor.drop.enabled": true,
+  "markdown.copyFiles.destination": {
+    "/content/notes/**/*.mdx": "assets/${documentBaseName}/",
+    "/content/notes/**/*.md": "assets/${documentBaseName}/"
+  },
+  "markdown.copyFiles.overwriteBehavior": "uniqueFilename"
+}

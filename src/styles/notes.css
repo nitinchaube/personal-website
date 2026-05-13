@@ -1,0 +1,368 @@
+/* Aman.ai-inspired minimal reading theme for /notes.
+   Scoped under `.notes-root` so it never bleeds into the portfolio. */
+
+.notes-root {
+  --notes-bg: #ffffff;
+  /* Box surface: very faint warm cream. Looks like a sheet of paper on a white desk. */
+  --notes-surface: #fbfaf6;
+  --notes-text: #222222;
+  --notes-text-muted: #6b6b6b;
+  --notes-border: #ececeb;
+  --notes-link: #1a73e8;
+  --notes-accent: #b91c1c;
+  --notes-chip-bg: #f3f3ef;
+  --notes-chip-bg-active: #222222;
+  --notes-chip-text-active: #ffffff;
+  --notes-code-bg: #f3f3f0;
+  --notes-pre-bg: #0d1117;
+
+  background: var(--notes-bg);
+  color: var(--notes-text);
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', 'Apple Garamond', Georgia, Cambria, 'Times New Roman', serif;
+  min-height: 100vh;
+}
+
+.notes-root a {
+  color: var(--notes-link);
+}
+
+.notes-root .notes-nav {
+  border-bottom: 1px solid var(--notes-border);
+  background: var(--notes-surface);
+}
+
+.notes-root .notes-wordmark {
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  letter-spacing: -0.005em;
+}
+
+.notes-root .notes-nav-link {
+  color: var(--notes-text);
+  text-decoration: none;
+  font-size: 15px;
+  transition: color 0.15s ease;
+}
+.notes-root .notes-nav-link:hover,
+.notes-root .notes-nav-link[aria-current='page'] {
+  color: var(--notes-accent);
+}
+
+/* Search bar */
+.notes-root .notes-search {
+  position: relative;
+  width: 100%;
+}
+.notes-root .notes-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--notes-border);
+  border-radius: 8px;
+  padding: 7px 10px 7px 10px;
+  background: var(--notes-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.notes-root .notes-search-input-wrap:focus-within {
+  border-color: #b7b4ab;
+  box-shadow: 0 0 0 3px rgba(160, 158, 150, 0.18);
+}
+.notes-root .notes-search-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--notes-text-muted);
+  flex-shrink: 0;
+}
+.notes-root .notes-search-input {
+  flex: 1 1 auto;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 14.5px;
+  color: var(--notes-text);
+  min-width: 0;
+}
+.notes-root .notes-search-input::placeholder {
+  color: #a3a399;
+}
+/* Hide the browser's default clear "x" on the search input */
+.notes-root .notes-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+.notes-root .notes-search-kbd {
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--notes-text-muted);
+  border: 1px solid var(--notes-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: #fff;
+  flex-shrink: 0;
+  user-select: none;
+}
+@media (max-width: 640px) {
+  .notes-root .notes-search-kbd {
+    display: none;
+  }
+}
+
+.notes-root .notes-search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--notes-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(20, 20, 20, 0.08), 0 4px 10px rgba(20, 20, 20, 0.04);
+  z-index: 30;
+  overflow: hidden;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.notes-root .notes-search-dropdown ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+.notes-root .notes-search-empty {
+  padding: 14px 16px;
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 13.5px;
+  color: var(--notes-text-muted);
+}
+.notes-root .notes-search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  text-decoration: none;
+  color: var(--notes-text);
+  transition: background 0.1s ease;
+}
+.notes-root .notes-search-result[data-active='true'],
+.notes-root .notes-search-result:hover {
+  background: #f5f4ef;
+}
+.notes-root .notes-search-result-title {
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--notes-text);
+  line-height: 1.4;
+}
+.notes-root .notes-search-result-meta {
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 12.5px;
+  color: var(--notes-text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.notes-root .notes-search-result-cat {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: #555;
+  font-size: 11px;
+}
+.notes-root .notes-search-result-summary {
+  color: var(--notes-text-muted);
+}
+.notes-root .notes-search-result-sep {
+  color: var(--notes-text-muted);
+}
+
+.notes-root .notes-tag-chip {
+  border: 1px solid var(--notes-border);
+  background: var(--notes-chip-bg);
+  color: var(--notes-text);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.notes-root .notes-tag-chip:hover {
+  border-color: #c8c5bd;
+}
+.notes-root .notes-tag-chip[data-active='true'] {
+  background: var(--notes-chip-bg-active);
+  color: var(--notes-chip-text-active);
+  border-color: var(--notes-chip-bg-active);
+}
+
+.notes-root .notes-meta {
+  color: var(--notes-text-muted);
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+/* Folder boxes on the /notes index — like sheets of paper resting on a white desk */
+.notes-root .notes-box {
+  background: var(--notes-surface);
+  border: 1px solid var(--notes-border);
+  border-radius: 8px;
+  padding: 20px 22px 16px;
+  box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 1px 0 rgba(20, 20, 20, 0.02);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  display: flex;
+  flex-direction: column;
+}
+.notes-root .notes-box:hover {
+  border-color: #d8d5cd;
+  box-shadow: 0 4px 14px rgba(20, 20, 20, 0.06), 0 1px 0 rgba(20, 20, 20, 0.03);
+  transform: translateY(-1px);
+}
+
+.notes-root .notes-box-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--notes-border);
+}
+
+.notes-root .notes-box-title {
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--notes-text);
+  margin: 0;
+}
+
+.notes-root .notes-box-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notes-root .notes-box-link {
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-size: 16px;
+  color: var(--notes-link);
+  text-decoration: none;
+  line-height: 1.45;
+  display: inline-block;
+}
+.notes-root .notes-box-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.notes-root .notes-card-title {
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.008em;
+  color: var(--notes-text);
+}
+.notes-root .notes-card-title:hover {
+  color: var(--notes-link);
+}
+
+.notes-root .notes-divider {
+  border: none;
+  border-top: 1px solid var(--notes-border);
+}
+
+/* Heading anchor (#) shown on hover */
+.notes-root .prose a.heading-anchor {
+  margin-left: 0.35em;
+  opacity: 0;
+  text-decoration: none;
+  color: var(--notes-text-muted);
+  transition: opacity 0.15s ease;
+}
+.notes-root .prose h2:hover a.heading-anchor,
+.notes-root .prose h3:hover a.heading-anchor,
+.notes-root .prose h4:hover a.heading-anchor {
+  opacity: 1;
+}
+
+/* rehype-pretty-code styling */
+.notes-root .prose pre {
+  overflow-x: auto;
+  background: var(--notes-pre-bg);
+}
+.notes-root .prose figure[data-rehype-pretty-code-figure] {
+  margin-top: 1.4em;
+  margin-bottom: 1.4em;
+}
+.notes-root .prose figure[data-rehype-pretty-code-figure] pre {
+  padding: 1rem 1.1rem;
+}
+.notes-root .prose [data-rehype-pretty-code-title] {
+  font-family: SF-Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #d1d5db;
+  background: #161b22;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 1px solid #21262d;
+}
+.notes-root .prose [data-rehype-pretty-code-title] + pre {
+  border-radius: 0 0 6px 6px;
+  margin-top: 0;
+}
+.notes-root .prose code[data-line-numbers] {
+  counter-reset: line;
+}
+.notes-root .prose code[data-line-numbers] > [data-line]::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 1.5rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: #6e7681;
+}
+.notes-root .prose [data-line] {
+  padding: 0 0.25rem;
+}
+.notes-root .prose [data-highlighted-line] {
+  background: rgba(200, 200, 255, 0.08);
+  border-left: 2px solid #58a6ff;
+  padding-left: calc(0.25rem - 2px);
+}
+
+/* Inline KaTeX tweaks so math sits nicely in serif body */
+.notes-root .prose .katex {
+  font-size: 1.02em;
+}
+.notes-root .prose .katex-display {
+  margin: 1.4em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Right-rail TOC */
+.notes-root .notes-toc {
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 13.5px;
+  color: var(--notes-text-muted);
+  line-height: 1.55;
+}
+.notes-root .notes-toc a {
+  color: var(--notes-text-muted);
+  text-decoration: none;
+  display: block;
+  padding: 2px 0;
+}
+.notes-root .notes-toc a:hover {
+  color: var(--notes-text);
+}
+.notes-root .notes-toc-heading {
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #999;
+  margin-bottom: 0.5rem;
+}
