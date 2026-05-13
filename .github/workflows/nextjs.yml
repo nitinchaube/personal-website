@@ -54,13 +54,14 @@ jobs:
           node-version: "20"
           cache: ${{ steps.detect-package-manager.outputs.manager }}
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v5
         with:
-          # Automatically inject basePath in your Next.js configuration file and disable
-          # server side image optimization (https://nextjs.org/docs/api-reference/next/image#unoptimized).
-          #
-          # You may remove this line if you want to manage the configuration yourself.
-          static_site_generator: next
+          # Auto-enable GitHub Pages on the repo if it isn't already, so a
+          # fresh clone / fork doesn't need a manual settings flip.
+          enablement: true
+          # Manage Next.js basePath ourselves via NEXT_PUBLIC_BASE_PATH below,
+          # so we deliberately omit `static_site_generator: next`.
       - name: Restore cache
         uses: actions/cache@v4
         with:
@@ -74,6 +75,10 @@ jobs:
       - name: Install dependencies
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
       - name: Build with Next.js
+        env:
+          # Empty on custom-domain Pages, "/<repo>" on project Pages.
+          # Drives next.config.js basePath + withBase() helper at build time.
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: ${{ steps.detect-package-manager.outputs.manager }} run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

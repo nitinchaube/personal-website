@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import { stripOrderPrefixPath } from '../../lib/notes-shared';
+import { withBase } from '../../lib/site';
 
 type ImgProps = ComponentProps<'img'>;
 
@@ -14,11 +15,12 @@ type ImgProps = ComponentProps<'img'>;
  * with prefixes stripped from every directory segment, so the rewrite here strips them too.
  */
 export function mdxComponentsFor(postDir: string) {
-  const prefix = postDir ? `/notes-assets/${postDir}/` : '/notes-assets/';
+  const prefix = withBase(postDir ? `/notes-assets/${postDir}/` : '/notes-assets/');
 
   const rewriteImageSrc = (src?: string): string | undefined => {
     if (!src) return src;
-    if (/^(https?:|data:|\/)/.test(src)) return src;
+    if (/^(https?:|data:)/.test(src)) return src;
+    if (src.startsWith('/')) return withBase(src);
     // Strip leading "./" and a possible "assets/" prefix from the relative link.
     const cleaned = src.replace(/^\.\//, '').replace(/^assets\//, '');
     // Strip any "01-" / "1_" prefix from each remaining segment so the URL

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SearchEntry } from '../../lib/notes-shared';
+import { withBase } from '../../lib/site';
 
 type Props = {
   entries: SearchEntry[];
@@ -84,7 +85,7 @@ const SearchBar = ({ entries }: Props) => {
       e.preventDefault();
       const target = results[activeIdx];
       if (target) {
-        window.location.href = `/notes/${target.slug}`;
+        window.location.href = withBase(`/notes/${target.slug}`);
       }
     }
   };

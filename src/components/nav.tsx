@@ -9,6 +9,7 @@ import webGLFluidEnhanced from 'webgl-fluid-enhanced';
 import { motion, Variants } from 'framer-motion';
 import { fadeIn } from '../utils/motion';
 import { changeVariant, changePalette, isDarkVariant } from '../utils/colors';
+import { withBase } from '../lib/site';
 
 // On /notes the minimal NotesNav takes over so we suppress the portfolio Nav entirely.
 const Nav = () => {
@@ -23,10 +24,10 @@ const Nav = () => {
       return;
     }
     if ('route' in link && link.route) {
-      window.location.href = link.route;
+      window.location.href = withBase(link.route);
       return;
     }
-    window.location.href = isHome ? `#${link.id}` : `/#${link.id}`;
+    window.location.href = isHome ? `#${link.id}` : withBase(`/#${link.id}`);
   };
 
   const changeTheme = () => {
