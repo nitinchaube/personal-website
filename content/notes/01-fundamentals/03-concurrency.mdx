@@ -7,11 +7,15 @@ tags: [Foundations]
 
 Working note on how Python handles concurrent work — from the GIL to the event loop and `asyncio` coordination primitives.
 
+---
+
 ## Mental model: the waiter analogy
 
 1. **Synchronous (normal Python):** One waiter takes an order, walks to the kitchen, and stands there until the food is ready.
 2. **Multithreading:** You hire ten waiters. They can all stand in the kitchen at once. It is faster but expensive.
 3. **Asyncio:** One waiter takes an order, hands it to the kitchen, and immediately goes to take another order. When the kitchen bell rings (an I/O event), the waiter returns to finish the first task. The waiter is rarely idle.
+
+---
 
 ## Multiprocessing, multithreading, and asyncio
 
@@ -21,6 +25,8 @@ Working note on how Python handles concurrent work — from the GIL to the event
 | Memory | Separate (higher usage) | Shared (lower usage) | Shared (very low overhead) |
 | Who switches tasks? | Operating system | Operating system | The Python event loop |
 | Bypasses Python's GIL? | Yes | No | No (does not need to) |
+
+---
 
 ## The GIL and CPU-bound vs I/O-bound work
 
@@ -33,6 +39,8 @@ CPython has a **Global Interpreter Lock (GIL):** only one thread executes Python
 | **CPU-bound** already in native code that releases the GIL | Threads or processes, depending on the library |
 
 **Rule of thumb:** `asyncio` shines when you await I/O a lot. If a function would **block the thread for milliseconds+** without hitting `await`, keep it off the main loop (see below).
+
+---
 
 ## Asyncio syntax and entry point
 
@@ -52,6 +60,8 @@ asyncio.run(main())
 
 Use **`asyncio.get_running_loop()`** when you need the loop from inside async code. Avoid legacy `get_event_loop()` patterns unless you are on very old code paths.
 
+---
+
 ## Event loop
 
 The event loop is the central conductor: it decides what runs when and handles pausing and resuming.
@@ -67,6 +77,8 @@ It keeps spinning and asking:
 2. **Execution:** The loop runs a task until it **yields** — usually at an `await`.
 3. **I/O watcher (selector):** When a task `await`s a network call, the loop moves it to a waiting set and asks the OS to watch the socket. When data arrives, the loop can put the task back on the ready queue.
 
+---
+
 ## Blocking vs cooperative sleep
 
 Never use `time.sleep()` inside asyncio code: it blocks the **entire** loop. Use cooperative sleep instead:
@@ -77,6 +89,8 @@ await asyncio.sleep(seconds)
 
 That schedules only the current task; other tasks can run. `await asyncio.sleep(0)` is a polite “yield so others can run” without waiting on a timer.
 
+---
+
 ## Offloading blocking work
 
 Libraries that are **not** async (blocking sockets, `requests`, heavy `subprocess`, some ORMs) will stall the whole loop if you call them inside a coroutine. Options:
@@ -85,6 +99,8 @@ Libraries that are **not** async (blocking sockets, `requests`, heavy `subproces
 - **`loop.run_in_executor(executor, func, *args)`**: same idea; pass `None` for the default thread pool or a **`ProcessPoolExecutor`** for CPU-heavy Python you cannot rewrite as async.
 
 CPU-heavy Python belongs in **processes**, not on the asyncio thread pool, or you will still serialize on the GIL.
+
+---
 
 ## Coroutines: direct `await` (sequential)
 
@@ -98,6 +114,8 @@ Once a coroutine is driven by the loop, it moves through phases:
 6. **Done:** It returns a value and is finished.
 
 If you only `await` one coroutine at a time from a single flow, you wait until it finishes before starting the next — that is **sequential**, not concurrent overlap with other coroutines you care about.
+
+---
 
 ## Tasks: overlapping execution
 
@@ -117,6 +135,8 @@ await t
 | Await coroutine | `await my_func()` | Run it now; I pause here until it finishes. |
 | Create task | `asyncio.create_task(my_func())` | Schedule it on the ready queue; I can keep going. |
 
+---
+
 ## `asyncio.gather`
 
 `asyncio.gather(*coros)` starts multiple coroutines as tasks and waits until **all** finish.
@@ -127,6 +147,8 @@ await t
 **Caveat:** If one task raises and you do not use `return_exceptions=True`, `gather` propagates the error — but other tasks may already be running. They can become hard-to-reason-about “zombie” work unless you cancel or await them cleanly.
 
 **`asyncio.wait`** is lower-level: you pass explicit **Task** objects and choose whether to wait for **all**, **first completed**, or **first exception**. Use it when you need fine-grained control; `gather` / `TaskGroup` cover most app code.
+
+---
 
 ## `asyncio.TaskGroup`
 
@@ -139,12 +161,16 @@ async with asyncio.TaskGroup() as tg:
 # all finished successfully, or an exception bubbled from the group
 ```
 
+---
+
 ## Cancellation
 
 **`task.cancel()`** schedules cancellation. The task’s coroutine keeps running until the next **`await`**, where **`asyncio.CancelledError`** is injected (subclass of `BaseException`, not `Exception` — do not swallow it with bare `except Exception`).
 
 - Prefer **`try` / `finally`** for cleanup; re-raise `CancelledError` if you catch it intentionally.
 - **`asyncio.shield(aw)`** prevents *direct* cancellation of the shielded awaitable from a parent scope — use sparingly (e.g. commit you must finish); it does not stop the whole program from exiting.
+
+---
 
 ## Timeouts
 
@@ -156,6 +182,8 @@ async with asyncio.timeout(30):
 ```
 
 `asyncio.timeout` is available in **3.11+**. On older versions, `asyncio.wait_for(aw, timeout=...)` is the usual pattern (it cancels the underlying task on timeout — understand that side effect).
+
+---
 
 ## Futures and awaitables (coffee shop)
 
@@ -170,6 +198,8 @@ async with asyncio.timeout(30):
 - **Future:** A low-level awaitable for an eventual result.
 - **Task:** A `Future` subclass that runs a coroutine to produce that result.
 
+---
+
 ## `async for` and `async with`
 
 - **`async for`** iterates an **async iterator** (e.g. streaming HTTP bodies, async database cursors).
@@ -182,6 +212,8 @@ async with lock:  # __aenter__ / __aexit__ may await
 ```
 
 The same pattern shows up on HTTP clients, DB sessions, and file helpers from async libraries: acquire in `__aenter__`, release in `__aexit__`, with `await` allowed in both.
+
+---
 
 ## Why locks exist on one thread
 
@@ -213,6 +245,8 @@ await queue.put(item)  # may wait if queue is full
 await queue.get()      # may wait if queue is empty
 ```
 
+---
+
 ## Primitive cheat sheet
 
 | Primitive | Analogy | Purpose |
@@ -222,6 +256,8 @@ await queue.get()      # may wait if queue is empty
 | Event | Starting pistol | Broadcast “go” to many waiters. |
 | Condition | Buzzer + rules | Wait until state matches (e.g. buffer big enough). |
 | Queue | Conveyor belt | Hand off work between producers and consumers. |
+
+---
 
 ## Pick a tool (recap)
 
