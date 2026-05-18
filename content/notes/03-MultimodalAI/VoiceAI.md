@@ -1,7 +1,7 @@
 ---
 title: "Voice AI Fundamentals"
 date: 2026-04-15
-summary: "How a real-time voice agent works — from phone audio to speech recognition, reasoning, and synthesis and what makes latency, turn-taking, and barge-in hard in production."
+summary: "How a real-time voice agent works, from phone audio to speech recognition, reasoning, and synthesis and what makes latency, turn-taking, and barge-in hard in production."
 tags: [Multimodal, VoiceAI]
 ---
 
@@ -19,7 +19,7 @@ A few properties of voice that text never forced you to think about:
 
 - **No rewind, no scrollback:** Speech is consumed once. If the user mishears the bot, the only fix is to repeat. Prosody, pacing and clarity are part of correctness.
 - **Continuous system:** Audio frames arrive every 20 ms regardless of who is "talking". Your code is always processing something.
-- **Full-duplex reality: **Humans feel like only one person should talk at a time, but the network carries both directions simultaneously. Your software has to enforce the social rule.
+- **Full-duplex reality.** Humans feel like only one person should talk at a time, but the network carries both directions simultaneously. Your software has to enforce the social rule.
 - **Lossy channel.** Phone audio is 8 kHz μ-law (~64 kbps before compression) on the PSTN. Sibilants, soft consonants and rare words degrade more than on a Zoom call.
 - **Ambient noise.** STT and VAD both suffer because of Background TV, car cabins, hospital corridors. Domain data beats general-purpose data here.
 - **Prosody carries meaning.** "Right?" vs. "Right." vs. "Right!" so the pitch contour changes intent. Most pipelines throw this away when they collapse audio to text.
@@ -65,7 +65,7 @@ Cross-cutting: VAD · endpointing · barge-in · logging · evals · metrics
 
 ## How the streams are wired
 
-A voice agent is not a request/response server. It is a **long-lived session** with several concurrent streams that have to be coordinated. Picture each call as a small swarm of tasks sharing a session state:
+A voice agent is not a request/response server. It is a **long-lived session** with several concurrent streams that have to be coordinated:
 
 ```
 Session state (per call)
@@ -80,15 +80,15 @@ Session state (per call)
 
 Three properties make this work in practice:
 
-1. **Backpressure-Friendly Queues (Decoupling Stages):** Instead of relying on direct, synchronous function calls, the system uses queues to pass data between stages. This prevents bottlenecks and ensures smooth operation; for example, if the Text-to-Speech (TTS) engine experiences a brief delay, the Large Language Model (LLM) can continue generating tokens seamlessly, buffering them in the queue until the TTS is ready.
-2. **Single Source of Truth for State:** All critical system data is centralized, typically within a single in-memory Session object. This guarantees that every component references the exact same up-to-date context, managing the conversation history, pending and completed tool calls, slot values, and the current audio playback offset.
-3. **Strict Cancellation Discipline:** The architecture must gracefully handle real-time interruptions, such as a user "barge-in." When an interruption occurs, the system immediately and cleanly aborts the current playback task and drops any pending TTS requests. This flushes the pipeline and ensures the next conversational turn starts from a clean, stable state.
+1. **Backpressure-friendly queues** between stages, not direct synchronous calls. If TTS hiccups, the LLM keeps generating into a buffer.
+2. **Single session object** for history, slots, tool results, and playback offset so every task sees the same state.
+3. **Cancellation discipline** on barge-in: stop playback and drop pending TTS so the next turn starts clean.
 
-In Python this typically means `asyncio` + `asyncio.Queue` between stages, with each vendor's WebSocket SDK running as its own coroutine. 
+In Python this usually means `asyncio` + `asyncio.Queue` between stages, with each vendor WebSocket SDK as its own coroutine. 
 
 ---
 
-## Latency:
+## Latency
 
 A naive implementation runs stages **in series**: wait for silence → finalize transcript → wait for full LLM reply → synthesize all audio → play. Add the numbers and you land around **750 ms – 2 s** before the caller hears anything which is often too slow.
 
@@ -134,7 +134,7 @@ Watch **P95 and P99**, not P50. A single 4-second turn on a 100-call dataset wil
 
 ---
 
-## Turn detection:
+## Turn detection
 
 People say "VAD" and "endpointing" interchangeably. They solve different problems at different time scales.
 
@@ -146,51 +146,28 @@ People say "VAD" and "endpointing" interchangeably. They solve different problem
 | **Semantic endpointing**           | Meaning of partial text | Does this *sound* complete even if they paused? |
 
 
-- **Voice Activity Detection (Is someone speaking right now?):** This is a fast, lightweight tool that runs directly on your device without needing a lot of computing power. It constantly checks tiny slices of audio to answer a simple "yes" or "no." It typically uses either small, smart AI models (which are great at ignoring background noise) or basic volume checks (which are even faster but might get confused by a TV playing in the background).
-- **Endpointing (Is the speaker completely finished?):** This tool uses the information from the VAD to figure out when you have finished your entire thought. It does this by looking for a specific amount of silence (like a third of a second) and applying rules to make sure you didn't just take a breath or say a filler word like "um." Once it decides you are officially done talking, it signals the system to send your request to the AI.
+**VAD** is cheap and local: a small neural net (e.g. Silero) or an energy threshold per frame. Output is basically yes/no per frame.
+
+**Endpointing** sits on top: e.g. 300 ms of silence after speech, plus rules for minimum utterance length and trailing filler words. Output is an event: *user turn ended*, which triggers the LLM.
 
 ```python
 class Endpointer:
-    def __init__(self, required_silence_ms=500, required_speech_ms=200):
-        # The gap of silence needed to assume the person is done (e.g., 500ms)
-        self.required_silence_ms = required_silence_ms
-        
-        # The minimum length of a sound to count as actual speech.
-        # This stops a random cough or table bump from triggering it (e.g., 200ms)
-        self.required_speech_ms = required_speech_ms
-        
-        # Variables to keep track of the timestamps
-        self.time_of_last_voice = None
-        self.time_speech_started = None
+    def __init__(self, silence_ms=500, min_speech_ms=200):
+        self.silence_ms = silence_ms
+        self.min_speech_ms = min_speech_ms
+        self.last_voice_ts = None
+        self.speech_started_at = None
 
-    def feed(self, current_time_ms, is_voice: bool) -> bool:
-        # If the mic picks up a voice right now...
+    def feed(self, frame_ts_ms, is_voice: bool) -> bool:
         if is_voice:
-            self.time_of_last_voice = current_time_ms
-            
-            # Log the start time if this is the very first sound we're hearing
-            if self.time_speech_started is None:
-                self.time_speech_started = current_time_ms
-                
-            # They are currently talking, so the turn definitely isn't over
+            self.last_voice_ts = frame_ts_ms
+            if self.speech_started_at is None:
+                self.speech_started_at = frame_ts_ms
             return False
-
-        # If the mic picks up silence, but no one has spoken yet, just ignore it
-        if self.time_speech_started is None:
+        if self.speech_started_at is None:
             return False
-            
-        # At this point, we know they WERE talking, but are now quiet.
-        # So we do some quick math to check our two rules:
-        
-        # 1. Was it a real sentence and not just a stray noise?
-        time_spent_speaking = self.time_of_last_voice - self.time_speech_started
-        spoke_long_enough = time_spent_speaking >= self.required_speech_ms
-        
-        # 2. Have they been quiet long enough to assume they finished?
-        time_spent_silent = current_time_ms - self.time_of_last_voice
-        silent_long_enough = time_spent_silent >= self.required_silence_ms
-        
-        # If both of those are true, the turn is officially over
+        spoke_long_enough = (self.last_voice_ts - self.speech_started_at) >= self.min_speech_ms
+        silent_long_enough = (frame_ts_ms - self.last_voice_ts) >= self.silence_ms
         return spoke_long_enough and silent_long_enough
 ```
 
@@ -216,7 +193,7 @@ Implementation options:
 
 While the bot plays TTS, the caller might interrupt with a real question or with **backchannels** ("uh-huh", "yeah") that are not interruptions at all.
 
-**Naive approach is to **gnore user audio until TTS finishes and this is bullshit.
+**Naive approach:** ignore inbound audio until TTS finishes. That breaks real conversations.
 
 **Better approach:**
 
@@ -224,14 +201,14 @@ While the bot plays TTS, the caller might interrupt with a real question or with
 2. On speech detected, **stop or pause TTS** and buffer new audio for STT.
 3. Start a new turn from that transcript.
 
-But the trap is that pure VAD stops the bot on every "mm-hm." **AI verified barge-in** pauses TTS, runs a few words through a tiny classifier or model, and either **resumes** playback (backchannel) or **hands off** to a full new turn (real interrupt).
+Pure VAD alone stops the bot on every "mm-hm." **Verified barge-in** pauses TTS, classifies a few words, then either **resumes** (backchannel) or starts a new turn (real interrupt).
 
 ### Mechanics worth knowing
 
-- **Audio Ducking (The "Soft Pause")** Instead of slamming on the brakes and abruptly cutting the bot's audio the second you make a noise, the system just lowers the bot's volume by about half (6–12 dB). If the AI decides your noise was just an "uh-huh," the bot's volume swells back up. It feels much smoother than a hard stop.
-- **Echo Cancellation (Ignoring Itself)** If you are talking to a bot on a speakerphone, the bot's voice comes out of the speaker and goes right back into the microphone. Without Acoustic Echo Cancellation (AEC), the bot will hear its own voice, think *you* are interrupting it, and constantly cut itself off.
-- **Hardware Traffic Jams (Half-Duplex)** Some older phone networks and office phone systems are "half-duplex"—meaning audio can only travel in one direction at a time, like a one-lane bridge. If a user is on a system like this, voice interruptions physically cannot work because the bot's speaking audio blocks the user's microphone audio. In these cases, you have to design the system to use keypad presses (DTMF) for interruptions instead.
-- **Remembering Its Place (Playback Offset)** If the bot pauses for an interruption, decides it was a false alarm (like a dog barking), and wants to resume speaking, it needs to know exactly where it left off. Tracking the "playback offset" ensures the bot picks up mid-sentence, rather than frustratingly repeating the entire paragraph from the beginning.
+- **Audio ducking.** Lower TTS by ~6–12 dB when VAD fires instead of a hard cut. Resume volume if the classifier says backchannel.
+- **Echo cancellation.** On speakerphone, TTS can re-enter the mic and trigger false barge-in. WebRTC AEC or carrier-side suppression is required.
+- **Half-duplex paths.** Some PBX setups only carry audio one way at a time. Barge-in may not work; fall back to DTMF.
+- **Playback offset.** If you resume after a false interrupt, pick up mid-sentence instead of replaying from the start.
 
 ---
 
@@ -271,7 +248,7 @@ Most production streaming STT systems use one of two architectures:
 
 ---
 
-## The LLM:
+## The LLM
 
 On a call the model wears several hats at once:
 
@@ -282,7 +259,7 @@ On a call the model wears several hats at once:
 
 ### Prompting for voice
 
-Voice prompts look different from chat prompts. A few rules worth burning into the system message:
+Voice prompts look different from chat prompts. A few rules for the system message:
 
 - **Speak in short turns.** One or two sentences per response by default. Long monologues feel like a lecture and balloon TTS latency.
 - **No markdown, no lists, no code.** Anything you write goes through TTS. `**bold**` becomes "asterisk asterisk bold asterisk asterisk".
@@ -298,7 +275,7 @@ Enable token streaming and **pipe tokens to TTS as they arrive**. Waiting for th
 Practical chunking strategy:
 
 1. Buffer LLM tokens into a small text buffer.
-2. Flush to TTS when you hit a sentence-ending punctuation, an em-dash, or N tokens (e.g. 30) without one.
+2. Flush to TTS on sentence-ending punctuation, a dash, or after N tokens (e.g. 30) without either.
 3. Never split a number, abbreviation, or proper noun across TTS calls if you can avoid it then pronunciation suffers.
 
 ### Tool calls mid-conversation
@@ -335,13 +312,13 @@ A few patterns worth adopting:
 - **Confirmations as separate turns:** Get the slots, *speak them back*, get a yes, *then* call the mutating tool. Never write to a system of record without an explicit confirmation token in context.
 - **Strict output grammar:** Use JSON Schema or constrained decoding for slot extraction. Free-text "the date is March 15" creates ambiguity; `{"date": "2026-03-15"}` does not.
 
-**On Managing Latency with Filler Audio**: In voice AI, dead air during a tool call is the fastest way to break the user experience because callers will assume the system dropped and start talking over it. To manage that one-to-two second latency gap, the architecture needs a deterministic filler strategy. The moment a tool call is triggered, we immediately push a pre-recorded or low-latency streamed phrase like 'pulling that up now...' over the WebSocket. It completely masks the backend API execution time, maintains natural turn-taking, and keeps the user engaged without them ever realizing they're waiting on a database.
+**Filler audio** while tools run (100 ms to 2 s): pre-recorded lines ("one moment"), a streamed acknowledgment before the API call, or hold music only for long waits.
 
-**On the Strict Grounding Rule for Healthcare** : For healthcare applications, strict data grounding isn't a feature; it's a non-negotiable safety requirement. Hallucinating an appointment time or a billing balance isn't a model quirk, it's a critical failure. The core architectural rule I follow is that the agent can never confirm a fact it hasn't explicitly received from a validated tool result. To enforce this, we don't allow optimistic generation. We use an inline gate that completely blocks the LLM from generating a confirmation utterance until the backend EHR or scheduling API returns a verified success code, guaranteeing the agent only speaks absolute truth."
+**Grounding rule:** do not confirm facts the model did not get from a tool result. For regulated domains, gate confirmation TTS until the backend returns success.
 
 ---
 
-## TTS: text to speech
+## TTS
 
 Optimize for **time to first audio chunk** first and polish second.
 
@@ -366,10 +343,10 @@ Optimize for **time to first audio chunk** first and polish second.
 
 ### How streaming TTS actually works
 
-Two protocols always dominates:
+Two protocols dominate:
 
-- **Chunked HTTP / SSE : **Open a single POST, audio streams back in chunks of ~50–200 ms. Simple, works through most proxies. Slightly higher overhead per request.
-- **Persistent WebSocket: **Open once at session start, push text chunks across the session, receive audio back. Lowest latency, requires careful reconnect logic. (BEST FOR PRODUCTION)
+- **Chunked HTTP / SSE.** One POST; audio streams back in ~50–200 ms chunks. Simple behind most proxies.
+- **Persistent WebSocket.** Open once per session; push text, receive audio. Lower latency; needs reconnect logic.
 
 The first audio chunk is the one users feel. After that, your job is to keep the buffer non-empty: TTS should be producing the *N+1* sentence while the caller hears the *N*th.
 
@@ -444,7 +421,7 @@ Most carrier-side integrations handle this for you. If you ingest raw RTP, plan 
 
 ### DTMF (keypad tones)
 
-Touch-tone digits arrive either as **in-band audio tones** or as **RFC 2833 / SIP INFO** out-of-band events. They are how callers say "press 1 to confirm" and how legacy IVRs hand off to your agent. Capture them as first-class events on the session — do not try to detect them through STT.
+Touch-tone digits arrive either as **in-band audio tones** or as **RFC 2833 / SIP INFO** out-of-band events. They are how callers say "press 1 to confirm" and how legacy IVRs hand off to your agent. Capture them as first-class events on the session. Do not route keypad tones through STT.
 
 Formats you will convert between in your app:
 
@@ -494,7 +471,7 @@ Voice content is unusually sensitive: it carries voice biometrics, often PII or 
 
 - **PII / PHI redaction at the log boundary.** Names, DOBs, account numbers, free-text health info. Redact in transcripts before they hit your log store; keep an encrypted, access-controlled raw copy if legally required.
 - **In-transit encryption.** SIP/RTP can be unencrypted; insist on **SRTP** (encrypted RTP) where available. WebRTC is encrypted by default (DTLS-SRTP).
-- **At-rest encryption.** Recordings, transcripts, vector indices over them — all encrypted with managed keys.
+- **At-rest encryption.** Recordings, transcripts, and any derived indices encrypted with managed keys.
 - **Vendor data use.** STT and TTS vendors have varying defaults for training on your data. Confirm and pin the "do not train" setting for every vendor in writing.
 
 ### Regulatory baselines
@@ -512,7 +489,7 @@ The first few seconds of a call usually need: "This call may be recorded for qua
 
 ## Observability and evaluation
 
-Unlike text-based chat systems where a slow response or a delayed database call simply means a spinning loading wheel, voice applications fail in ways that standard request-response logs completely mask. Things like user barge-ins, broken turn-taking loops, premature cut-offs, and silent tool-execution waits are native audio-layer failures. To manage a real-time voice pipeline, per-request metrics aren't enough so you need granular, per-turn telemetry to capture exactly when, where and why the conversational flow broke down.
+Voice agents fail in ways chat logs hide: cut-offs, barge-in loops, silent tool waits. Log **per turn**, not only per HTTP request.
 
 ### Per-turn record (the unit of debugging)
 
@@ -552,7 +529,7 @@ Log roughly:
 
 This record alone gives you P50/P95 dashboards, latency breakdowns per stage, regression detection, and post-mortem material when a call goes sideways.
 
-### Metrics that are be worth logging every call
+### Metrics worth logging every call
 
 - Time-to-first-response after each user turn (P50 / P95 / P99)
 - STT confidence and endpoint events
@@ -572,7 +549,7 @@ This record alone gives you P50/P95 dashboards, latency breakdowns per stage, re
 | **User signal**  | Callback rate, survey, task completion proxies                                |
 
 
-### Some of the Eval techniques worth knowing are:
+### Eval techniques
 
 - **WER (Word Error Rate)** for STT, but compute it **per cohort** (accent, ambient noise, domain) so cohort-specific regressions are visible.
 - **MOS (Mean Opinion Score)** for TTS : a 1–5 perceived-quality rating, usually estimated by a model (e.g. NISQA) rather than humans.
@@ -603,9 +580,9 @@ Most production stacks in 2026 still use the explicit STT → LLM → TTS pipeli
 Putting the whole pipeline together, here is what a single turn looks like with timings on a healthy production stack:
 
 ```
-t=0 ms      Caller starts speaking: "I'd like to refill—"
+t=0 ms      Caller starts speaking: "I'd like to refill..."
 t=200 ms    First STT partial: "I'd like"
-t=900 ms    Caller still speaking: "—my prescription"
+t=900 ms    Caller still speaking: "...my prescription"
 t=1200 ms   Caller stops speaking. VAD silent.
 t=1500 ms   Endpointer fires (300 ms of silence after speech).
             Final transcript: "I'd like to refill my prescription"
@@ -632,7 +609,7 @@ Three things make this work:
 
 ---
 
-## Failure modes:
+## Failure modes
 
 
 | Symptom                     | Likely cause                         | Direction for a fix                                    |
@@ -653,7 +630,7 @@ Three things make this work:
 
 ---
 
-## Sources:
+## Sources
 
 ### Telephony & audio transport
 

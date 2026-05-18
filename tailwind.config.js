@@ -82,6 +82,7 @@ module.exports = {
             },
             h3: {
               fontWeight: '600',
+              fontStyle: 'italic',
               fontSize: '1.2rem',
               marginTop: '1.8em',
               marginBottom: '0.5em',
