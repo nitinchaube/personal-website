@@ -51,9 +51,9 @@ Cross-cutting: VAD · endpointing · barge-in · logging · evals · metrics
 
 | Stage               | Role                                       | Typical vendors                         | Order-of-magnitude latency  |
 | ------------------- | ------------------------------------------ | --------------------------------------- | --------------------------- |
-| **Telephony**       | Bridges the phone network to your servers  | Twilio, Telnyx, Plivo                   | <50 ms (network)            |
-| **Audio transport** | Streams raw frames to your app             | Twilio Media Streams, LiveKit           | <50 ms                      |
-| **VAD**             | Detects speech vs. silence per tiny window | Silero, WebRTC VAD                      | <50 ms                      |
+| **Telephony**       | Bridges the phone network to your servers  | Twilio, Telnyx, Plivo                   | &lt;50 ms (network)            |
+| **Audio transport** | Streams raw frames to your app             | Twilio Media Streams, LiveKit           | &lt;50 ms                      |
+| **VAD**             | Detects speech vs. silence per tiny window | Silero, WebRTC VAD                      | &lt;50 ms                      |
 | **STT**             | Speech → text, continuously                | Deepgram, AssemblyAI, Whisper           | 180–500 ms to first partial |
 | **Endpointing**     | Decides "user finished this turn"          | Often bundled with STT or a small model | 200–700 ms                  |
 | **LLM**             | Reasons, replies, may call tools           | GPT-4o, Claude, fine-tuned models       | 300–800 ms to first token   |
@@ -119,13 +119,13 @@ The mental model is a pipeline of **streams**, not a pipeline of **requests**. C
 
 | Metric           | Definition                                                    | Healthy target                 |
 | ---------------- | ------------------------------------------------------------- | ------------------------------ |
-| **Mouth-to-ear** | Last user audio frame → first bot audio frame heard by caller | < 800 ms P50, <1.5 s P95       |
-| **STT TTFP**     | First audio frame in → first partial out                      | < 300 ms                       |
-| **STT finalize** | Endpoint event → final transcript                             | < 200 ms                       |
-| **LLM TTFT**     | Prompt sent → first token                                     | < 500 ms                       |
-| **TTS TTFB**     | First text chunk in → first audio byte out                    | < 250 ms                       |
-| **Tool RTT**     | Call out → result back                                        | < 500 ms ideal, <2 s tolerable |
-| **Jitter**       | Variance in inter-frame delivery time                         | < 30 ms                        |
+| **Mouth-to-ear** | Last user audio frame → first bot audio frame heard by caller | &lt; 800 ms P50, &lt;1.5 s P95       |
+| **STT TTFP**     | First audio frame in → first partial out                      | &lt; 300 ms                       |
+| **STT finalize** | Endpoint event → final transcript                             | &lt; 200 ms                       |
+| **LLM TTFT**     | Prompt sent → first token                                     | &lt; 500 ms                       |
+| **TTS TTFB**     | First text chunk in → first audio byte out                    | &lt; 250 ms                       |
+| **Tool RTT**     | Call out → result back                                        | &lt; 500 ms ideal, &lt;2 s tolerable |
+| **Jitter**       | Variance in inter-frame delivery time                         | &lt; 30 ms                        |
 
 
 Watch **P95 and P99**, not P50. A single 4-second turn on a 100-call dataset will not show up in averages but will show up in every angry user.
@@ -348,7 +348,7 @@ Optimize for **time to first audio chunk** first and polish second.
 
 | Dimension           | Why it matters                                                   |
 | ------------------- | ---------------------------------------------------------------- |
-| First-chunk latency | Dominates perceived responsiveness (< 300 ms is a common target) |
+| First-chunk latency | Dominates perceived responsiveness (&lt; 300 ms is a common target) |
 | Naturalness         | Trust and comprehension on phone audio                           |
 | Voice consistency   | Same persona across calls                                        |
 | Streaming protocol  | WebSocket / chunked HTTP vs. wait-for-full-file                  |
@@ -456,7 +456,7 @@ Formats you will convert between in your app:
 | **Opus**        | WebRTC                           |
 
 
-Resampling 8 kHz → 16 kHz is cheap (<10 ms). Plan for it in your audio path, not as an afterthought.
+Resampling 8 kHz → 16 kHz is cheap (&lt;10 ms). Plan for it in your audio path, not as an afterthought.
 
 ---
 
