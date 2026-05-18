@@ -244,7 +244,7 @@ Most production streaming STT systems use one of two architectures:
 - **Domain vocabulary**: product codes, drug names, internal terms. Fix with keyword boosts or fine-tuning; do not assume general STT will guess right.
 - **Spoken numbers**: "twenty twenty-four" vs. "2024", dates, phone numbers, dosages. Always run a normalization pass after STT, or pin slot values via a structured re-extraction step.
 - **Accents**: Report word-error rate **per cohort**, not one global number. Average WER hides catastrophic failures on minority cohorts.
-- **Diarization** : Telling who is speaking. Trivial on a 2-leg phone call (each leg is its own track). Hard when multiple people share a mic, which happens more than you think (family in waiting rooms, conference rooms).
+- **Diarization.** Telling who is speaking. Trivial on a 2-leg phone call (each leg is its own track). Hard when multiple people share a mic, which happens more than you think (family in waiting rooms, conference rooms).
 
 ---
 
@@ -385,7 +385,7 @@ Cloning lets you keep a consistent persona, but adds responsibility:
 Two common paths are applied in industry:
 
 1. **PSTN(Public Switched Telephone Network) → carrier (e.g. Twilio) → WebSocket frames → your server**
-2. **WebRTC (LiveKit, Daily) → SFU → your worker** : lower latency, great for browser/voice-app, more moving parts for plain PSTN.
+2. **WebRTC (LiveKit, Daily) → SFU → your worker.** Lower latency for browser apps; more moving parts for plain PSTN.
 
 ### A bit of SIP/RTP background
 
@@ -412,7 +412,7 @@ Two conversions you will see or configure:
 
 ### Jitter buffer and packet loss
 
-UDP packets arrive out of order or not at all. The audio pipeline needs a **jitter buffer** : a small queue (typically 40–100 ms) that reorders and smooths inbound frames. Tradeoffs:
+UDP packets arrive out of order or not at all. The audio pipeline needs a **jitter buffer**, a small queue (typically 40–100 ms) that reorders and smooths inbound frames. Tradeoffs:
 
 - Larger buffer → more resilience to network jitter, more added latency.
 - Smaller buffer → snappier, more glitches.
