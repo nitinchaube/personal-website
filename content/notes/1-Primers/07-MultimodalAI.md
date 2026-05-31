@@ -1,5 +1,5 @@
 ---
-title: "Multimodal AI
+title: "Multimodal AI"
 date: 2026-05-31
 summary: "A comprehensive technical guide to multimodal AI — the five core challenges, architectural paradigms from CLIP to Chameleon, contrastive training, the modality gap, and open research problems."
 tags: [Multimodal, Foundations, AI, LLM]
