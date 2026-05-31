@@ -1,5 +1,5 @@
 ---
-title: "Evaluating LLM Agents: From a Single Test to Production"
+title: "Evaluating LLM Agents"
 date: 2026-05-31
 summary: "A practical, deep walk up the agent evaluation ladder, from grading a single answer offline to trajectory checks, LLM judges, execution sandboxes, and live production monitoring, with the math, worked examples, and failure modes that actually matter."
 tags: [Evaluation, Agents, LLM, LLMOps, AI]
@@ -13,11 +13,31 @@ These are my notes on how I think about evaluating agents, organized as a ladder
 
 ---
 
-## Know what you're actually evaluating
+## Roadmap
+
+These notes climb an evaluation ladder. Each part exists because the part below it has a blind spot you eventually get burned by.
+
+| Part | What you learn | When you need it |
+| --- | --- | --- |
+| I · Foundations | Autonomy level, dimensions, output vs trajectory vs state | Before writing any test |
+| II · Offline basics | Golden sets, metrics, RAG decomposition, robustness | Every commit / CI |
+| III · Multi-step offline | Tools, plans, trajectories, pass@k vs pass^k | Tool-calling and workflow agents |
+| IV · Automated scoring | Rules, executors, LLM judges, layered stacks | Thousands of traces |
+| V · Human evaluation | Transcripts, rubrics, inter-rater agreement | Where automation fails |
+| VI · Pre-production | Sandboxes, benchmarks, replay, synthetic tasks | Before release |
+| VII · Production | Online signals, shadow/canary, CLEAR, observability | Live traffic |
+| VIII · Operating eval | Workflow loop, failure modes, tooling | Making it stick |
+
+---
+
+
+## Part I — Foundations
+
+### Know what you're actually evaluating
 
 Before you write a single test, two questions decide everything that follows: *how autonomous is this thing*, and *what does "good" even mean for it*.
 
-### The autonomy ladder
+#### The autonomy ladder
 
 Not every "AI agent" is an agent, and the eval you need scales with how much rope the system has.
 
@@ -43,7 +63,7 @@ A **fully autonomous agent** sets its own sub-goals, decides its own number of s
 
 The practical takeaway: **the further right you are on this ladder, the less your final-answer score is worth.** If you're building a tool-calling agent and still only grading the last message, you are measuring the one layer that lies to you most convincingly.
 
-### Pick your dimensions before your metrics
+#### Pick your dimensions before your metrics
 
 "Is the agent good" is not a measurable question. You have to commit to dimensions first, and they trade off against each other. Here is how I actually operationalize each one, because "be correct and fast and cheap" is a wish, not a spec.
 
@@ -59,7 +79,7 @@ The practical takeaway: **the further right you are on this ladder, the less you
 
 You rarely optimize all five. An agent tuned purely for correctness usually turns into a slow, expensive monster that re-reads everything on every step. Decide up front which two or three you're willing to defend in a tradeoff, and treat the rest as guardrails (thresholds you must not cross rather than numbers you maximize).
 
-### Output vs. trajectory vs. state change
+#### Output vs. trajectory vs. state change
 
 This is the single most important idea in the whole note, so it gets its own diagram and a careful walk-through.
 
@@ -84,11 +104,13 @@ A useful way to internalize the hierarchy: **output answers "what did it claim?"
 
 ---
 
-## Single-turn offline basics
+## Part II — Offline basics
+
+### Single-turn offline basics
 
 Everything starts offline, on fixed examples, running on every commit. This is the cheapest and fastest feedback loop, and it should catch the boring regressions before a human ever sees them.
 
-### Golden datasets and test case design
+#### Golden datasets and test case design
 
 A golden set is a curated collection of inputs paired with their expected (ideal) outputs, and optionally the expected trajectory or end state. It is the closest thing an agent project has to a unit-test suite, and like tests, its value is entirely in coverage, not size.
 
@@ -116,14 +138,12 @@ A concrete schema I use, so each case is self-checking:
 
 Two rules I hold firmly. First, **I'd rather have 60 examples evenly spread across the three buckets than 600 happy-path examples that all test the same thing.** A lopsided golden set produces a green dashboard and a false sense of safety. Second, **version the golden set alongside prompts and model versions.** An eval result is only meaningful relative to the exact `(dataset@v, prompt@v, model@v)` triple that produced it; otherwise you can't tell whether last week's score drop came from a prompt change or a quietly-updated dataset.
 
-### How many test cases, and is the score even real?
+#### How many test cases, and is the score even real?
 
 A pass rate is a statistic, and statistics have error bars that people routinely ignore. If you run $N$ test cases and observe a pass rate $\hat{p}$, you are estimating a binomial proportion, and its standard error is
-
-$$  
+$$
 \text{SE} = \sqrt{\frac{\hat{p}(1 - \hat{p})}{N}}, \qquad \text{95 CI} \approx \hat{p} \pm 1.96\text{SE}.  
 $$
-
 Worked example: on a 50-case set you measure 80% pass. Then $\text{SE} = \sqrt{0.8 \cdot 0.2 / 50} \approx 0.057$, so the true pass rate lives somewhere around $80 \pm 11$. That means a "win" from 80% to 85% on a 50-case set is *statistically indistinguishable from noise*. The band shrinks like $1/\sqrt{N}$: roughly ±9 points at $N=30$, ±5 at $N=100$, ±2.5 at $N=400$. For metrics that aren't simple proportions (mean score, latency p95) use the **bootstrap**: resample your test set with replacement a few thousand times, recompute the metric each time, and take the 2.5th–97.5th percentiles as the interval.
 
 The discipline this buys you: **report confidence intervals, not bare point estimates, and never celebrate a delta smaller than your error bar.** Most "the new prompt is 3% better" claims evaporate the moment you draw the band. (Near 0% or 100% the simple formula misbehaves; the **Wilson score interval** is the more accurate version there.)
@@ -136,33 +156,29 @@ Three more statistical habits separate careful evaluation from cargo-culting num
 
 **Do a power calculation before you run.** "How many examples do I need to detect a 3-point change?" has a real answer, and it's almost always larger than the set you currently have. Working it out up front stops you from running an experiment that was never capable of proving anything in the first place.
 
-### Reference-based metrics
+#### Reference-based metrics
 
 When outputs are deterministic enough to have a "correct" string, the classic NLP metrics still earn their keep, and it's worth understanding exactly what each one rewards.
 
 **Exact Match (EM)**: 1 if the normalized output equals the reference, else 0. Brutal but perfect for things with a single right answer: extracted IDs, yes/no, a numeric total, a classification label. Always normalize first (lowercase, strip punctuation and articles) or you'll fail "Paris." against "paris".
 
 **F1 over tokens**: softer than EM, it rewards partial overlap by treating the prediction and reference as bags of tokens. With precision $P$ (fraction of predicted tokens that are correct) and recall $R$ (fraction of reference tokens that were recovered):
-
-$$  
+$$
 P = \frac{|\text{pred} \cap \text{ref}|}{|\text{pred}|}, \qquad  
 R = \frac{|\text{pred} \cap \text{ref}|}{|\text{ref}|}, \qquad  
 F_1 = \frac{2 \cdot P \cdot R}{P + R}  
 $$
-
 Worked example. Reference: "the order ships on tuesday" (5 tokens). Prediction: "your order ships tuesday" (4 tokens). The overlap is {order, ships, tuesday} = 3 tokens. So $P = 3/4 = 0.75$, $R = 3/5 = 0.60$, and
-
-$$  
+$$
 F_1 = \frac{2 \cdot 0.75 \cdot 0.60}{0.75 + 0.60} = \frac{0.90}{1.35} \approx 0.67.  
 $$
-
 Notice F1 sits between precision and recall and punishes both padding (hurts precision) and omission (hurts recall). The same machinery underlies **ROUGE** (recall-leaning, for summarization) and **BLEU** (precision-leaning with n-gram matching, for translation).
 
 **Semantic similarity**: embed the output and the reference into vectors and take cosine similarity, then threshold it. This is what you reach for when "the capital is Paris" and "Paris is the capital" should both count as correct despite low token F1. The hard part is choosing the threshold: too low and "the capital is Lyon" sneaks through (it's *textually* very similar), too high and valid paraphrases fail. Calibrate the threshold on labeled pairs, and prefer a model fine-tuned for sentence similarity. **BERTScore** is the more careful cousin, it matches each token's contextual embedding to its best partner in the other sentence and aggregates, which handles word order and synonyms better than a single sentence vector.
 
 These all break the moment the right answer can be phrased a hundred different ways *and* correctness depends on meaning the embedding can't fully capture (negation, a single wrong digit, a subtly unsafe phrasing). That's exactly the gap LLM judges fill in automated scoring.
 
-### RAG eval decomposition
+#### RAG eval decomposition
 
 If your agent retrieves before it generates, evaluate the two halves separately or you'll spend a week tuning the wrong one. (I wrote about why retrieval and generation are separate quality problems in the retrieval notes; the same logic drives RAG eval.) The reason is diagnostic: a wrong final answer can come from "we never retrieved the fact" or "we retrieved it and the model ignored it," and the fix is completely different.
 
@@ -174,16 +190,14 @@ Decompose into four metrics, two per side. The RAGAS framework popularized compu
 
 **Generation side.**  
 *Faithfulness*: is every claim in the answer grounded in the retrieved context? Operationally, an LLM extracts the atomic claims from the answer and checks each one against the context:
-
-$$  
+$$
 \text{Faithfulness} = \frac{\text{claims supported by the retrieved context}}{\text{total claims in the answer}}.  
 $$
-
 *Answer Relevancy*: does the answer actually address the question that was asked (rather than a related one)? A common trick is to have an LLM generate questions *from* the answer and measure how similar they are to the original question.
 
 Worked example of why decomposition matters. The user asks "What's the refund window for EU customers?" The answer comes back fluent and on-topic: "EU customers can request a refund within 45 days." Answer Relevancy is high (it's clearly about EU refunds). But the retrieved policy doc says 30 days, and "45" appears nowhere in the context. Faithfulness is low: the model hallucinated a number. Without the decomposed view you'd see a wrong answer and might go re-tune the retriever, when the retriever did its job perfectly and the *generator* invented the figure. The fix is a faithfulness/grounding constraint, not better retrieval.
 
-### Robustness, invariance and fairness
+#### Robustness, invariance and fairness
 
 A correct answer that flips when you add a typo isn't really correct, it's lucky. Borrowing from CheckList-style behavioral testing, the most informative offline tests are often *invariance* and *directional* checks rather than fixed input/output pairs.
 
@@ -193,7 +207,7 @@ A correct answer that flips when you add a typo isn't really correct, it's lucky
 
 **Fairness / parity**: run the same scenarios across user attributes that should get identical treatment (names signalling different genders or ethnicities, different dialects, different locales) and check that quality, tone, and especially refusal rates don't diverge. Disparities here are both an ethics problem and, increasingly, a compliance one. The common thread is that all three test *behavior and stability*, not just whether one canned input produces one canned output.
 
-### Smoke tests and prompt regression suites
+#### Smoke tests and prompt regression suites
 
 The least glamorous and most valuable layer. Every prompt change is a potential regression, and prompts are weirdly fragile: tightening one instruction ("always confirm the date") can silently wreck three unrelated behaviors (now it asks for confirmation even when the date was already given).
 
@@ -201,11 +215,13 @@ Keep a small, fast regression suite wired into CI that answers exactly one quest
 
 ---
 
-## Multi-step agent evaluation (offline)
+## Part III — Multi-step offline
+
+### Multi-step agent evaluation (offline)
 
 Single-turn checks max out the moment your agent takes more than one action. Now you need to grade the path, and the path has structure: tools, arguments, plans, and order.
 
-### Tool selection and argument correctness
+#### Tool selection and argument correctness
 
 Two distinct failures hide here, and conflating them wastes debugging time because the fixes live in different places.
 
@@ -215,21 +231,19 @@ Two distinct failures hide here, and conflating them wastes debugging time becau
 
 I always grade these as two separate metrics, because "wrong tool" tells me to fix routing/planning and "wrong arguments" tells me to fix extraction/grounding, and a single blended "tool score" would hide which one regressed.
 
-### Plan quality and plan adherence
+#### Plan quality and plan adherence
 
 For agents that plan explicitly (a chain-of-thought, an upfront task list, a scratchpad), you can extract the plan as a first-class object and grade it on two independent axes.
 
 **Plan quality**: was the strategy itself sound *before execution*? Did it include the necessary steps, in a feasible order, without obviously redundant or missing actions? You typically grade this with an LLM judge against a rubric, or against a reference plan. Example of a bad plan that an output grader would never flag: for "refund my last order," the agent plans `[issue_refund, lookup_order]`, refund first, lookup second. The eventual answer might even be right by luck, but the plan is backwards.
 
 **Plan adherence**: did the agent then *follow* its own plan, or drift halfway through and start improvising? A clean way to measure this is the edit distance (Levenshtein) between the planned step sequence and the executed step sequence, normalized by plan length:
-
-$$  
+$$
 \text{Adherence} = 1 - \frac{\text{editdistance}(\text{planned}, \text{executed})}{\max(|\text{planned}|, |\text{executed}|)}.  
 $$
-
 Reasoning drift, a perfect plan abandoned at step three because an intermediate observation confused the model, is a common and sneaky failure. High plan quality with low adherence tells you the model *knows* what to do but loses the thread mid-execution, which points you at context management and step-level prompting rather than at the planner.
 
-### Trajectory evaluation
+#### Trajectory evaluation
 
 Zoom all the way out to the full execution log and grade the sequence as a whole. There are two complementary styles.
 
@@ -243,44 +257,36 @@ Zoom all the way out to the full execution log and grade the sequence as a whole
 
 The point of trajectory eval is that **two trajectories can reach the identical correct answer while differing wildly in cost and risk.** One does it in 3 clean steps; the other takes 15, calls a write API it shouldn't have touched, and got the right answer by accident. Output eval scores them identically. Trajectory eval is how you tell the robust agent from the lucky one.
 
-### Task completion and step efficiency
+#### Task completion and step efficiency
 
 The headline success metric is **task completion**: was the user's actual *intent* satisfied? This is ideally measured as a state change, not as a claim in the final message.
 
 Pair it with **step efficiency** so you don't reward an agent that technically succeeded after 40 flailing steps. A simple, interpretable proxy:
-
-$$  
+$$
 \text{StepEfficiency} = \frac{\text{minimum steps needed}}{\text{steps the agent actually took}}.  
 $$
-
 Efficiency of 1.0 means it took the optimal path; 0.25 means it took four times as many steps as necessary. Completion tells you *if* the agent succeeded; efficiency tells you *how wastefully*. A booking agent that completes the task in 12 steps when 3 would do is burning latency and tokens on every single request, and that gap is invisible to a pure completion metric.
 
-### Reliability: pass@k and pass^k
+#### Reliability: pass@k and pass^k
 
 Here's the trap that single-run testing sets for you. Agents are probabilistic (temperature, sampling, non-deterministic tool results). Run the same task twice and you can get success then failure. So one green run means almost nothing, you need to measure *distributions*. The two metrics that matter point in opposite directions, and understanding the difference is one of the most important things in this whole note.
 
 Set up the estimator the way the Codex paper did it. For a task, draw $n$ independent samples and let $c$ of them succeed.
 
 **pass@k** answers: "if I let the agent try $k$ times and count success if *at least one* attempt works, what's the success rate?" It rewards best-of-$k$ capability (useful when you can verify and retry, like code that either compiles or doesn't). The unbiased estimator is one minus the probability that *all* $k$ sampled attempts were failures:
-
-$$  
+$$
 \text{pass@}k = 1 - \frac{\dbinom{n - c}{k}}{\dbinom{n}{k}}.  
 $$
-
 The fraction is "ways to choose $k$ from the $n-c$ failures" over "ways to choose $k$ from all $n$," i.e. the chance your $k$ picks are all duds. Worked example: $n=10$ samples, $c=4$ successes, $k=2$ tries. Then $\binom{6}{2}/\binom{10}{2} = 15/45 = 0.33$, so $\text{pass@}2 = 1 - 0.33 = 0.67$. A 40% single-shot agent becomes a 67% agent if you let it try twice and keep any success.
 
 **pass^k** (sometimes written pass-hat-k) answers the much harsher question made prominent by τ-bench: "what's the probability the agent succeeds on *all* $k$ consecutive attempts?" This measures *consistency*, which is what you actually need when the agent runs unattended and every step must hold. With single-trial success probability $p = c/n$ and independence:
-
-$$  
+$$
 \text{pass}^k = \left(\frac{c}{n}\right)^k = p^k.  
 $$
-
 The chasm between these two is where brittleness lives. Say an agent succeeds 70% of the time on a single run ($p = 0.7$). That sounds shippable. But the probability it nails eight tasks in a row is:
-
-$$  
+$$
 \text{pass}^8 = 0.7^{8} \approx 0.058.  
 $$
-
 Under 6%. The full decay is sobering:
 
 | $k$ | $\text{pass}^k$ at $p=0.7$ | at $p=0.9$ | at $p=0.99$ |
@@ -292,7 +298,7 @@ Under 6%. The full decay is sobering:
 
 Two lessons jump out. First, **pass@k flatters your agent and pass^k humbles it**: the same model can look like a 70% success story (single-shot) and a 6% disaster (eight-step reliability). Second, **for long-horizon autonomy you need per-step reliability in the high 90s**, because reliability compounds multiplicatively. The gap between a 90% and a 99% agent is barely visible single-shot but is the difference between 19% and 85% over sixteen steps. For anything that runs without a human watching, I care far more about pass^k than pass@k.
 
-### Multi-turn and conversational evaluation
+#### Multi-turn and conversational evaluation
 
 So far "multi-step" has meant one task that happens to take many tool calls. *Multi-turn* is a different axis: many back-and-forth turns with a user, often spanning several tasks, where the hard part is everything that has to persist across turns. An agent can ace every turn in isolation and still fail the conversation.
 
@@ -307,11 +313,13 @@ The genuinely hard part is *generating* multi-turn tests, because each user turn
 
 ---
 
-## Automated scoring at scale
+## Part IV — Automated scoring
+
+### Automated scoring at scale
 
 Once you're processing thousands of traces, humans can't grade them all. You need machines doing the first pass, layered from cheapest and most reliable to most expensive and most fallible.
 
-### Rule-based checks (do these first)
+#### Rule-based checks (do these first)
 
 Deterministic code is the fastest, cheapest, and most trustworthy scorer you have, and it never hallucinates. Reach for it for anything with a hard, checkable answer:
 
@@ -321,7 +329,7 @@ Deterministic code is the fastest, cheapest, and most trustworthy scorer you hav
 
 These are essentially free, fully deterministic, and immune to the biases that plague model-based grading. Exhaust them before you reach for an LLM. A good rule of thumb: if a question can be answered by code, it must be answered by code, save the model for genuinely subjective judgments.
 
-### Executable verifiers (run it, don't just judge it)
+#### Executable verifiers (run it, don't just judge it)
 
 When the agent produces something *executable*, the gold-standard grader is neither an LLM nor string matching, it's running the artifact and checking the result. This is the most reliable signal in the whole toolbox, because reality decides, not a model's opinion.
 
@@ -332,7 +340,7 @@ When the agent produces something *executable*, the gold-standard grader is neit
 
 Whenever you *can* turn a judgment into an execution, do it. An executed test is deterministic, unbiased, and cheap to re-run, everything an LLM judge is not. Reserve the judge for the genuinely unverifiable.
 
-### LLM-as-a-judge
+#### LLM-as-a-judge
 
 For the genuinely subjective stuff, tone, helpfulness, "is this explanation actually clear," "is this summary faithful", a capable model grades the output. This is the workhorse of modern eval, and it comes in three shapes.
 
@@ -355,19 +363,17 @@ Pointwise is good for tracking absolute quality over time, but raw numeric score
 
 **Checklist** (binary decomposition): turn a fuzzy requirement into a list of concrete yes/no questions and score the fraction passed. For a booking confirmation: "Did it state the date? Did it state the price? Did it confirm the passenger name? Did it avoid promising anything not in the itinerary?" This converts "is it good" into something repeatable and debuggable, you see *which* box failed, not just a vague low score. There's also an emerging **Agent-as-a-Judge** style where the judge is itself an agent that can call tools to verify claims (e.g. actually query the booking system) rather than judging from text alone, which pushes LLM judging toward state-change fidelity.
 
-### From comparisons to rankings: Elo and panels of judges
+#### From comparisons to rankings: Elo and panels of judges
 
 Pairwise wins are only useful if you can turn them into an ordering. The **Bradley-Terry** model (the statistics behind chess **Elo** and the LMSYS Chatbot Arena leaderboard) does exactly that: it gives each model a latent strength $s_i$ and predicts the chance one beats another as a logistic function of the gap,
-
-$$  
+$$
 P(i \text{ beats } j) = \frac{1}{1 + e^{-(s_i - s_j)}},  
 $$
-
 then fits all the strengths by maximum likelihood over your recorded matchups. The payoff is a single, interpretable ranking pulled out of a pile of noisy pairwise votes, including for models that never faced each other directly.
 
 A second technique worth adopting is the **panel of judges (a "jury")** instead of one big judge. Rather than trusting a single frontier model, you poll several smaller, diverse models and aggregate their verdicts (majority vote, or averaged score). This dilutes any one model's idiosyncratic bias (self-preference especially), is frequently cheaper than one large judge, and hands you a free disagreement signal: the cases where the panel splits are precisely the ones worth escalating to a human.
 
-### Judge calibration and bias
+#### Judge calibration and bias
 
 Here's the uncomfortable truth: an uncalibrated LLM judge is *confidently* biased, and the biases are systematic, not random, so they don't average out. You have to actively fight each one.
 
@@ -378,36 +384,30 @@ Here's the uncomfortable truth: an uncalibrated LLM judge is *confidently* biase
 **Self-preference (self-enhancement) bias**: a model tends to rate text from itself or its own family more highly. *Mitigation:* use a *different* model family as the judge than the one being graded, and never let a model be the sole judge of its own outputs.
 
 Two practices I apply on every judge. First, **force reasoning before the score** (chain-of-thought first, the number last). Emitting the verdict before the justification measurably degrades agreement, because the model anchors on a snap judgment and rationalizes it. Second, **calibrate against human labels**, you are not done building a judge until it agrees with your human graders on a held-out set. The standard agreement measure is Cohen's kappa, which corrects for the agreement you'd get by random chance:
-
-$$  
+$$
 \kappa = \frac{p_o - p_e}{1 - p_e}  
 $$
-
 where $p_o$ is the observed agreement (fraction of items the judge and human scored the same) and $p_e$ is the agreement expected by chance given each rater's label distribution. Worked example for a binary pass/fail judge: suppose judge and human agree on 85% of items, so $p_o = 0.85$. If both label "pass" about 70% of the time, the chance agreement is $p_e = 0.7^2 + 0.3^2 = 0.49 + 0.09 = 0.58$. Then
-
-$$  
+$$
 \kappa = \frac{0.85 - 0.58}{1 - 0.58} = \frac{0.27}{0.42} \approx 0.64.  
 $$
-
 A rough deployment bar: ship the judge once $\kappa > 0.6$ (substantial agreement); above $0.8$ is excellent. Below $0.6$, your "automated eval" is mostly adding confident noise, and you should fix the rubric (usually the real culprit) before trusting the numbers. For multi-rater or non-binary scales, **Krippendorff's alpha** generalizes the same idea.
 
-### Hallucination, groundedness, and knowing when to abstain
+#### Hallucination, groundedness, and knowing when to abstain
 
 Three related quality problems sit slightly outside the "match a reference" frame and each deserves its own check.
 
 **Hallucination / groundedness.** When there is a source (retrieved context, a document, a tool result), you can check whether each claim is *entailed* by it. The clean formulation borrows from natural language inference (NLI): for every atomic claim in the answer, ask "does the source entail this, contradict it, or neither?" and penalize anything not entailed. This is the same machinery as RAG faithfulness from single-turn eval, generalized to any grounded answer. When there is *no* source, **SelfCheckGPT** offers a clever workaround: sample the same answer several times at non-zero temperature and check consistency. Real facts tend to stay stable across samples; hallucinations wobble. High cross-sample disagreement is a strong hallucination signal that needs no reference at all.
 
 **Calibration.** A trustworthy agent's confidence should track its accuracy: the things it states with 90% confidence should be right about 90% of the time. The standard measure is **Expected Calibration Error (ECE)**, which buckets predictions by stated confidence and sums the gap between confidence and actual accuracy in each bucket:
-
-$$  
+$$
 \text{ECE} = \sum_{b=1}^{B} \frac{|n_b|}{N} \bigl|\text{acc}(b) - \text{conf}(b)\bigr|.  
 $$
-
 A confidently wrong agent (low accuracy, high stated confidence) has high ECE and is dangerous exactly because users believe it. An *under*-confident agent wastes capability by hedging on things it actually knows.
 
 **Abstention.** Sometimes the correct answer is "I don't know" or "let me escalate this." Measure it explicitly: on questions that are genuinely unanswerable (no relevant context, out of scope, or against policy), the *right* behavior is to refuse, and an agent that confidently fabricates instead must score worse than one that abstains. Track abstention precision and recall as first-class metrics for anything high-stakes. Rewarding a confident wrong answer over an honest "I'm not sure" is how you accidentally train a liar.
 
-### Layered eval stacks
+#### Layered eval stacks
 
 Frameworks like DeepEval bundle these metrics into a stack that maps cleanly onto the multi-step eval layers, which is what makes debugging precise:
 
@@ -419,7 +419,9 @@ The value isn't the specific framework, it's the *separation of concerns*. When 
 
 ---
 
-## Human evaluation
+## Part V — Human evaluation
+
+### Human evaluation
 
 Automation gets you most of the way and then hits a wall. Humans live past that wall, and pretending otherwise is how subtle failures reach users.
 
@@ -429,7 +431,7 @@ Automation gets you most of the way and then hits a wall. Humans live past that 
 
 **Rubric design and inter-rater agreement.** When multiple humans grade the same outputs against an explicit, written rubric, you measure how much they agree (Cohen's kappa or Krippendorff's alpha again). High agreement means the rubric is unambiguous and the resulting labels are trustworthy; those labels become the ground-truth set you calibrate your LLM judges against. *Low* agreement is information too, it usually means the rubric is vague, not that the humans are careless, so you sharpen the definitions and re-grade. The human loop and the judge loop feed each other: humans produce the gold labels, the calibrated judge scales the humans' taste to thousands of traces, and humans re-engage whenever the judge hits something new.
 
-### Running human annotation well
+#### Running human annotation well
 
 Human labels are only as good as the process that produced them, and a sloppy annotation pipeline manufactures confident garbage that then poisons every judge you calibrate against it. A few practices matter more than people expect:
 
@@ -441,11 +443,13 @@ Human labels are only as good as the process that produced them, and a sloppy an
 
 ---
 
-## Pre-production integration evaluation
+## Part VI — Pre-production
+
+### Pre-production integration evaluation
 
 Before live users, you put the agent through environments that exercise the whole system end to end, and crucially, verify *state* rather than text.
 
-### Execution-based environments
+#### Execution-based environments
 
 These are interactive sandboxes where success is determined by inspecting the environment after the agent acts, not by reading the agent's own summary. They're the benchmark-scale version of state-change evaluation.
 
@@ -456,7 +460,7 @@ These are interactive sandboxes where success is determined by inspecting the en
 
 The shared idea is *programmatic verification*: did the DOM mutate the way it should (a Playwright `locator()` assertion), did the right file appear with the right contents, does the rendered screenshot structurally match the target (a fuzzy image match). Because success is read from the environment, these benchmarks cannot be fooled by a confident sentence, which is the entire point. The cost is real setup and slower runs, so they belong in pre-release integration testing, not in the every-commit smoke suite.
 
-### Benchmark categories
+#### Benchmark categories
 
 Don't think in benchmark *names*, think in *categories*, and pick the ones that match what your agent actually does:
 
@@ -466,11 +470,11 @@ Don't think in benchmark *names*, think in *categories*, and pick the ones that 
 
 **GAIA** sits near the apex of current difficulty. Its tasks are conceptually simple for a human ("which of these three papers has the most citations, and who is its second author?") but algorithmically nasty for a machine: they require unconstrained tool orchestration (web, files, calculation), multimodal reading, and many correct steps in sequence with no room for a single mistake. It's a good stress test precisely because you can't brute-force it with a bigger context window, you need a working agent loop.
 
-### Long-context evaluation
+#### Long-context evaluation
 
 Once the prompt grows to tens of thousands of tokens (long documents, long histories, many tool results), raw context *size* stops predicting whether the model can actually *use* it. The classic probe is **needle-in-a-haystack**: hide a specific fact at a known depth in a long filler context and ask for it back, sweeping the needle's position from start to end. The well-documented "lost in the middle" effect, where models recall the beginning and end far better than the middle, only reveals itself if you vary *depth*, not just length. More demanding suites (RULER-style) go past single-needle retrieval to multi-hop and aggregation over long context, which is closer to what agents actually do. If your agent stuffs everything into one giant prompt, test this directly, it's a common silent failure where the information was *present* but effectively invisible to the model.
 
-### Evaluating multimodal and voice agents
+#### Evaluating multimodal and voice agents
 
 Agents that see screens or talk to people add evaluation surfaces a pure-text agent never has.
 
@@ -478,21 +482,23 @@ Agents that see screens or talk to people add evaluation surfaces a pure-text ag
 
 **Voice agents** stack a speech pipeline on top, and each stage needs its own metric *plus* an end-to-end one. Transcription quality is **Word Error Rate (WER)** on the speech-to-text; the spoken reply gets naturalness and intelligibility scores (MOS-style). But the metrics users actually feel are conversational: **latency** (time from the user finishing to the agent starting to speak, where the budget is sub-second), **turn-taking** quality, and **barge-in** handling (can the user interrupt mid-sentence?). As always, no stage metric replaces end-to-end task success: a pipeline with great WER and great latency can still book the wrong appointment. (I go deeper on the pipeline itself in the voice notes.)
 
-### Replay eval from production traces
+#### Replay eval from production traces
 
 The cheapest source of brutally realistic test cases is your own incident history. Pull the traces that failed in production, freeze the exact inputs (and any non-deterministic tool responses, recorded so the replay is reproducible), and re-run them against every new agent version in staging. This proves a specific bug is actually patched and, more importantly, stops it from silently regressing three releases later. Replays are the bridge between "we saw it break once" and "it can never break that way again."
 
-### Synthetic scenario generation
+#### Synthetic scenario generation
 
 Static benchmarks rot. Both the model and the team tuning it start to overfit a fixed set, and your scores climb while real-world performance stalls (and there's the related risk of *contamination*, the benchmark leaking into training data). Generating dynamic task variations, new phrasings, new parameter values, new orderings of the same underlying task, keeps you honest about whether the agent *generalizes* or just memorized the answer key. The technique to watch for is using a strong LLM to mutate seed tasks while preserving the verifiable success condition, so each variant is still automatically gradable.
 
 ---
 
-## Production evaluation
+## Part VII — Production
+
+### Production evaluation
 
 In production the question changes from "does it pass the benchmark" to "is it healthy right now, on real traffic." This is also where your data flywheel gets built, the loop that makes the system improve instead of decay.
 
-### Three modalities, together
+#### Three modalities, together
 
 A mature setup runs all three at once, and they cover for each other's blind spots:
 
@@ -505,7 +511,7 @@ gates on every commit    before each release       async, can't block UX
 
 Offline is fast but narrow (it only knows what you thought to test). Staging replay is realistic but lags reality (it only knows what already broke). Online is the only modality seeing genuinely new traffic, but it's noisy and mostly can't block a response without hurting the user experience. You need all three; any one alone has a hole the other two cover.
 
-### Online signals
+#### Online signals
 
 In production you mostly *read signals* rather than compute scores, because you usually don't have a reference answer for live traffic.
 
@@ -515,7 +521,7 @@ In production you mostly *read signals* rather than compute scores, because you 
 
 A rising **human-escalation rate** is often the earliest, clearest sign that something regressed, frequently before any offline metric has a chance to move, because production sees query distributions your golden set never imagined.
 
-### Shadow, canary, and A/B
+#### Shadow, canary, and A/B
 
 Three ways to test a new version against reality with a controlled blast radius:
 
@@ -525,7 +531,7 @@ Three ways to test a new version against reality with a controlled blast radius:
 
 **A/B test**: deliberately split traffic and measure an *outcome* difference (completion rate, CSAT, cost per task) with statistical rigor. The rigor matters: decide the metric and the minimum detectable effect in advance, compute the sample size you need, and don't peek-and-stop the moment it looks good (that inflates false positives). LLM outputs are high-variance, so under-powered A/B tests routinely "prove" differences that are noise. Concretely, comparing two success rates is a two-proportion test, and the smallest gap you can reliably detect shrinks like $1/\sqrt{N}$, so catching a 2-point difference usually needs thousands of sessions per arm, not dozens. Decide your sample size *before* you start, not after the numbers look good.
 
-### CLEAR: the holistic scorecard
+#### CLEAR: the holistic scorecard
 
 Optimizing one number is how you ship an agent that's accurate and unusable. The CLEAR framing forces the multi-dimensional view that production actually requires:
 
@@ -538,14 +544,12 @@ Optimizing one number is how you ship an agent that's accurate and unusable. The
 | **R**  | Reliability | consistency across runs (hello, pass^k) |
 
 The single metric I've found settles the most arguments is **cost per success**, because it ties C and E together into one honest number:
-
-$$  
+$$
 \text{cost per success} = \frac{\text{total cost across all attempts}}{\text{number of tasks completed successfully}}.  
 $$
-
 Worked intuition: Agent X has 90% task success at 0.30 per attempt, so its cost per success is $0.30 / 0.90 \approx 0.33$. Agent Y has 85% success but at 0.09 per attempt, so $0.09 / 0.85 \approx 0.11$. Agent Y is *three times cheaper per actually-completed task* despite the lower headline accuracy, and unless that extra 5% of successes is worth the 3× premium, Y is the better product. CLEAR, and cost-per-success specifically, keeps you from celebrating an accuracy bump that quietly tripled the bill.
 
-### Turning many metrics into one decision
+#### Turning many metrics into one decision
 
 Eventually all these numbers have to collapse into a single call: ship or don't. Averaging everything into one weighted score is tempting and usually wrong, because it lets a great latency number paper over a safety regression. The structure that holds up is **hard gates plus a soft score**:
 
@@ -554,11 +558,11 @@ Eventually all these numbers have to collapse into a single call: ship or don't.
 
 This mirrors the dimensions-versus-guardrails split from the opening section: guardrails are gates, and the two or three dimensions you chose to optimize are the soft score. When two candidates sit within each other's confidence interval on the soft score, break the tie toward the cheaper, simpler, lower-risk one. Write the decision rule down *before* you see the numbers, otherwise you'll find yourself inventing a weighting that happens to bless the version you already liked.
 
-### Observability
+#### Observability
 
 You cannot evaluate what you cannot see. LLM observability platforms trace the full workflow as a tree of spans, every model call, tool invocation, token count, and latency, typically following the OpenTelemetry GenAI conventions so the data isn't locked to one vendor. With that trace data you can build a **failure taxonomy** (wrong tool, bad argument, non-progressing loop, timeout, unsafe action, hallucinated citation) and attach automated alerts that fire when quality or latency drifts past a threshold. The relationship is clean: *evals produce scores, observability produces the traces those scores are computed from.* You need both, a score with no trace is undebuggable, and a trace with no score is just logs.
 
-### The continuous eval loop
+#### The continuous eval loop
 
 This is the payoff, the flywheel that makes the whole system get better over time instead of slowly rotting:
 
@@ -579,7 +583,9 @@ Every production incident becomes a permanent regression test. Do this consisten
 
 ---
 
-## Enterprise maturity
+## Part VIII — Enterprise & operations
+
+### Enterprise maturity
 
 At the top, evaluation stops being a tool you run and becomes a governed process the organization depends on.
 
@@ -608,7 +614,9 @@ The bar is that the agent must *refuse or safely deflect* correctly, not merely 
 
 ---
 
-## Evaluation as a workflow, not a phase
+## Part IX — The eval workflow
+
+### Evaluation as a workflow, not a phase
 
 The biggest mistake teams make is treating evaluation as something you do *after* building, a gate bolted on at the end. The teams that get genuinely good treat it as the inner loop of development itself, the same way test-driven development works for ordinary software.
 
@@ -627,7 +635,7 @@ Two cultural habits make or break this. Evals must be **fast enough to run const
 
 ---
 
-## What actually fails (and where to look)
+### What actually fails (and where to look)
 
 From most common to most subtle, the failures I keep seeing:
 
@@ -647,7 +655,7 @@ From most common to most subtle, the failures I keep seeing:
 
 ---
 
-## The tooling landscape
+### The tooling landscape
 
 You rarely build all of this from scratch, so it helps to know roughly what exists and reach for the right layer:
 
