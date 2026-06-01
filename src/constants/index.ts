@@ -427,19 +427,6 @@ export const services = [
 
 export const experiences = [
   {
-    title: 'AI/ML Engineer',
-    companyName: 'PNC Solutions',
-    icon: pncsolutions,
-    date: 'Jan 2026 – Present',
-    points: [
-      'Performed feature engineering and data preprocessing for machine learning models using Python and Pandas, applying recursive feature elimination (RFE) on trading transaction data to improve model accuracy by 15% and reduce feature dimensionality by 30%.',
-      'Engineered classification models using Scikit-learn and PyTorch with Random Forest and XGBoost to predict trade settlement likelihood, achieving 87% AUC-ROC score and streamlining compliance review workflows for operations teams.',
-      'Built AI-powered client risk assessment system using Python, Pandas, and logistic regression with survival analysis to analyze portfolio holdings and market exposure history, enabling risk management for 80 high-value investment banking clients.',
-      'Developed predictive analytics pipeline using XGBoost regression and feature engineering in Python to forecast client portfolio risk exposure, improving capital allocation accuracy by 20% for quantitative research teams and reducing pricing error rate by 12%.',
-      'Deployed inference APIs using FastAPI and Docker on Google Cloud Run, integrating Vertex AI, OpenAI APIs, and Hugging Face APIs for trade document summarization, achieving 99% uptime with scalable low-latency inference in a production environment.',
-    ],
-  },
-  {
     title: 'Teaching Assistant – CS 513 & CS 284',
     companyName: 'Stevens Institute of Technology',
     icon: stevens,

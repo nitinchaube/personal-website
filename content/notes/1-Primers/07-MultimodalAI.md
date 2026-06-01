@@ -20,11 +20,6 @@ The Human brain doesn't process these separately, It fuses them into a unified u
 
 ![The modality spectrum — text, audio, images, and video along cost and structure axes](assets/pasted_20260531-160939.png)
 
-| | Text (Tokens) | Audio (Pixels) | Images (Waveforms) | Video (Frames + time) |
-| --- | --- | --- | --- | --- |
-| Cost / structure | Cheapest to Process | Temporal | Medium Cost, Spatial | Spatial + Temporal — (Most Expensive) |
-| Signal | Most Structured | 1D Signal | 2D Signal | 3D Signal |
-
 Modalities are not equal, each modality has different information density (pic is worth 1000 words), processing cost (Video >> Image >> Audio >> text), noise levels (speech in noisy room vs clean text), Alignment difficulty (Matching audio to the right video frame).
 
 ---
@@ -127,10 +122,10 @@ This is the modern approach used in transformers. The model isn't forced to alig
 
 ### Alignment challenges
 
-| Challenge | Description |
-| --- | --- |
-| Ambiguity | One word (e.g., "bank") might align with a river or a building depending on the visual. |
-| Granularity | Deciding if a word should align with a single pixel, a patch, or the whole image. |
+| Challenge    | Description                                                                               |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| Ambiguity    | One word (e.g., "bank") might align with a river or a building depending on the visual.   |
+| Granularity  | Deciding if a word should align with a single pixel, a patch, or the whole image.         |
 | Missing Data | Aligning a transcript to a video where the speaker goes off-camera (non-existent visual). |
 
 ---
@@ -167,11 +162,11 @@ Deep features from an image CNN and a text BERT are merged in the middle layers,
 
 Best of both worlds: It captures interactions while maintaining modality-specific processing.
 
-| Strategy | When? | Complexity | Interaction Level |
-| --- | --- | --- | --- |
-| Early | Input Layer | Low | High (Low-level) |
-| Late | Output Layer | High (Multiple Models) | Zero (Independent) |
-| Intermediate | Hidden Layers | Highest | High (Semantic) |
+| Strategy     | When?         | Complexity             | Interaction Level  |
+| ------------ | ------------- | ---------------------- | ------------------ |
+| Early        | Input Layer   | Low                    | High (Low-level)   |
+| Late         | Output Layer  | High (Multiple Models) | Zero (Independent) |
+| Intermediate | Hidden Layers | Highest                | High (Semantic)    |
 
 ---
 
@@ -269,11 +264,11 @@ The input sequence to the LLM looks like below. The LLM attends to these visual 
 
 In most of these architectures, we keep the Vision Encoder and LLM weights frozen. We only train the projector.
 
-| Component | Role | Analogy |
-| --- | --- | --- |
-| Vision Encoder | Extracts features from pixels. | The Eye (sees raw data). |
-| Projector | Transforms visual features into "soft prompts." | The Translator (converts "sight" to "language"). |
-| LLM | Processes the soft prompts + user text. | The Brain (reasons and generates response). |
+| Component      | Role                                            | Analogy                                          |
+| -------------- | ----------------------------------------------- | ------------------------------------------------ |
+| Vision Encoder | Extracts features from pixels.                  | The Eye (sees raw data).                         |
+| Projector      | Transforms visual features into "soft prompts." | The Translator (converts "sight" to "language"). |
+| LLM            | Processes the soft prompts + user text.         | The Brain (reasons and generates response).      |
 
 ### 3. Cross-Attention Mechanism (e.g. Flamingo)
 
@@ -413,37 +408,3 @@ Most models excel at global themes but struggle with mapping specific local deta
 ## Conclusion
 
 The field is moving toward Autonomous Multimodal Agents systems that do not just chat but plan and execute multi-step workflows across disparate software and physical tools. World Models are another major trend, where AI learns to predict future frames and physical outcomes based on interleaved visual and action signals. By 2026, it is projected that multimodal capabilities will be the "default" for 40% of generative AI solutions, shifting from "text-centric" to "omni-modality" systems. Multimodal AI represents a paradigm shift from specialized single-task models to unified general-purpose agents. While architectural innovations like shared tokenization and gated cross-attention have bridged many gaps, challenges in geometric alignment and training stability remain active areas of research. As models continue to scale and integrate new senses, they will play an increasingly critical role in high-stakes domains, bringing us closer to machines that can perceive and reason about the world with human-like fluidity.
-
----
-
-## Frequently Asked Questions
-
-Common questions about this blog post
-
-### What is the modality gap?
-
-The modality gap is a geometric phenomenon where different types of data, such as images and text, occupy distinct and disjoint regions (often described as "cones") within a shared embedding space. This separation occurs because deep neural architectures naturally restrict embeddings to narrow regions at initialization. During training, factors like mismatched data pairs and the behavior of the learnable temperature parameter in contrastive loss functions can further stabilize or even enlarge this gap.
-
-### Joint vs. coordinated representation?
-
-Joint representation learning creates a single, unified numerical representation by combining features from multiple encoders (e.g., a CNN for images and a Transformer for text) into one latent space. This is best for tasks where all modalities are available during both training and inference. Coordinated representations, however, process each modality in its own separate space but link them via structural constraints or coordination losses. This approach is more robust when a modality might be missing during inference.
-
-### What is QK-Norm?
-
-QK-Norm is a technique that applies layer normalization specifically to the query (Q) and key (K) vectors within each attention head of a Transformer. It is crucial for stabilizing "early-fusion" models like Chameleon because it prevents exploding dot-products in the attention mechanism, which can happen when mixing low-entropy text tokens with high-variance image tokens. This allows models to use higher learning rates without diverging.
-
-### What is LLaMA-Adapter?
-
-LLaMA-Adapter is a parameter-efficient method that adds only about 1.2 million learnable parameters to a frozen 7B-parameter Llama model. Its primary innovation is the "zero-initialized attention" mechanism with zero gating, which ensures that the model initially behaves exactly like the pre-trained LLM. As training progresses, the gates gradually open to incorporate new multimodal instructional signals (like image features) while preserving existing linguistic knowledge.
-
-### What is MIL-NCE?
-
-Multiple Instance Learning Noise Contrastive Estimation (MIL-NCE) is a specialized loss function designed to handle "uncurated" or misaligned data, such as YouTube videos where the narration might not perfectly match the visual action at every second. Instead of looking for a single positive pair, MIL-NCE considers a "bag" of potential candidates (narrations occurring within a few seconds of a clip) to identify the most likely matches, making the training more robust to temporal noise.
-
-### Can I run multimodal models locally?
-
-Yes. Techniques like QLoRA (Quantized Low-Rank Adaptation) allow developers to fine-tune large models by significantly reducing memory consumption (up to 80%) without a significant loss in accuracy. Additionally, beginners can use open-source frameworks like LangChain or Ollama to build local RAG (Retrieval-Augmented Generation) applications that process images and text without relying on expensive paid APIs.
-
-### Project ideas for learners
-
-Entry-level projects include creating a "Multimodal RAG" system that can answer questions based on figures and tables in a PDF or a meme sentiment classifier that aligns image content with captions. For intermediate learners, sign language-to-text systems or AI medical assistants that identify conditions like pneumonia from X-ray images are highly effective for learning the nuances of cross-modal alignment.
