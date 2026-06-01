@@ -1,9 +1,9 @@
 ---
-
-## title: "Evaluating LLM Agents"
+title: "Evaluating LLM Agents"
 date: 2026-05-31
 summary: "A practical, deep walk up the agent evaluation ladder, from grading a single answer offline to trajectory checks, LLM judges, execution sandboxes, and live production monitoring, with the math, worked examples, and failure modes that actually matter."
 tags: [Evaluation, Agents, LLM, LLMOps, AI]
+---
 
 The first time I shipped an agent that "passed all our tests," it broke in production within a day. It booked a meeting on the wrong calendar. The final message it sent the user was perfectly worded, polite, confident, and completely wrong about what it had actually done. Our test suite only ever checked that last message. It never checked whether the calendar event existed.
 
@@ -145,7 +145,8 @@ Three more statistical habits separate careful evaluation from cargo-culting num
 When outputs are deterministic enough to have a "correct" string, the classic NLP metrics still earn their keep, and it's worth understanding exactly what each one rewards.
 
 1. **Exact Match (EM)**: 1 if the normalized output equals the reference, else 0. Brutal but perfect for things with a single right answer: extracted IDs, yes/no, a numeric total, a classification label. Always normalize first (lowercase, strip punctuation and articles) or you'll fail "Paris." against "paris".
-2. **F1 over tokens**: Softer than EM, it rewards partial overlap by treating the prediction and reference as bags of tokens. With precision $P$ (fraction of predicted tokens that are correct) and recall $R$ (fraction of reference tokens that were recovered):  
+2. **F1 over tokens**: Softer than EM, it rewards partial overlap by treating the prediction and reference as bags of tokens. With precision $P$ (fraction of predicted tokens that are correct) and recall $R$ (fraction of reference tokens that were recovered):
+
 $$  
 P = \frac{|\text{pred} \cap \text{ref}|}{|\text{pred}|}, \qquad  
 R = \frac{|\text{pred} \cap \text{ref}|}{|\text{ref}|}, \qquad  
@@ -155,7 +156,7 @@ Worked example. Reference: "the order ships on tuesday" (5 tokens). Prediction: 
 $$  
 F_1 = \frac{2 \cdot 0.75 \cdot 0.60}{0.75 + 0.60} = \frac{0.90}{1.35} \approx 0.67.  
 $$  
-Notice F1 sits between precision and recall and punishes both padding (hurts precision) and omission (hurts recall). The same machinery underlies **ROUGE** (recall-leaning, for summarization) and **BLEU** (precision-leaning with n-gram matching, for translation).
+Notice F1 sits between precision and recall and punishes both padding (hurts precision) and omission (hurts recall). The same machinery underlies **ROUGE** (recall-leaning, for summarization) and **BLEU** (precision-leaning with n-gram matching, for translation).  
 3. **Semantic similarity**: Embed the output and the reference into vectors and take cosine similarity, then threshold it. This is what you reach for when "the capital is Paris" and "Paris is the capital" should both count as correct despite low token F1. The hard part is choosing the threshold: too low and "the capital is Lyon" sneaks through (it's *textually* very similar), too high and valid paraphrases fail. Calibrate the threshold on labeled pairs, and prefer a model fine-tuned for sentence similarity. **BERTScore** is the more careful cousin, it matches each token's contextual embedding to its best partner in the other sentence and aggregates, which handles word order and synonyms better than a single sentence vector.
 
 These all break the moment the right answer can be phrased a hundred different ways *and* correctness depends on meaning the embedding can't fully capture (negation, a single wrong digit, a subtly unsafe phrasing). That's exactly the gap LLM judges fill in automated scoring.
@@ -164,12 +165,15 @@ These all break the moment the right answer can be phrased a hundred different w
 
 If your agent retrieves before it generates, evaluate the two halves separately or you'll spend a week tuning the wrong one. (I wrote about why retrieval and generation are separate quality problems in the retrieval notes; the same logic drives RAG eval.) The reason is diagnostic: a wrong final answer can come from "we never retrieved the fact" or "we retrieved it and the model ignored it," and the fix is completely different. Decomposed into four metrics, two per side. The RAGAS framework popularized computing the generation-side ones with an LLM.
 
-**Retrieval side:**  
-1. *Context Precision*: Of the chunks we retrieved, what fraction are actually relevant? Low precision means you're stuffing noise into the prompt.  
+**Retrieval side:**
+
+1. *Context Precision*: Of the chunks we retrieved, what fraction are actually relevant? Low precision means you're stuffing noise into the prompt.
 2. *Context Recall*: Of the information needed to answer, what fraction did we retrieve? Low recall means the answer was impossible before the model even started.
 
-**Generation side:**  
-1. *Faithfulness*: Is every claim in the answer grounded in the retrieved context? Operationally, an LLM extracts the atomic claims from the answer and checks each one against the context:  
+**Generation side:**
+
+1. *Faithfulness*: Is every claim in the answer grounded in the retrieved context? Operationally, an LLM extracts the atomic claims from the answer and checks each one against the context:
+
 $$  
 \text{Faithfulness} = \frac{\text{claims supported by the retrieved context}}{\text{total claims in the answer}}.  
 $$  
@@ -314,8 +318,8 @@ Whenever you *can* turn a judgment into an execution, do it. An executed test is
 
 For the genuinely subjective stuff, tone, helpfulness, "is this explanation actually clear," "is this summary faithful", a capable model grades the output. This is the workhorse of modern eval, and it comes in three shapes.
 
-- **Pointwise** (also called reference-free or direct scoring): show the judge one output and a rubric, get back a score. Example prompt skeleton:
-  Pointwise is good for tracking absolute quality over time, but raw numeric scores from LLMs are noisy and poorly calibrated. **G-Eval** improves this by having the model fill out the rubric as a chain-of-thought and then computing a *probability-weighted* score from the token logprobs (so a "mostly 4, slightly 5" comes out as 4.2 instead of an arbitrary integer), which correlates noticeably better with human judgments.
+- **Pointwise** (also called reference-free or direct scoring): show the judge one output and a rubric, get back a score. Example prompt skeleton:  
+Pointwise is good for tracking absolute quality over time, but raw numeric scores from LLMs are noisy and poorly calibrated. **G-Eval** improves this by having the model fill out the rubric as a chain-of-thought and then computing a *probability-weighted* score from the token logprobs (so a "mostly 4, slightly 5" comes out as 4.2 instead of an arbitrary integer), which correlates noticeably better with human judgments.
 
 ```
 You are grading a customer-support reply for HELPFULNESS on a 1–5 scale.
