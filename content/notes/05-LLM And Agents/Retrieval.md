@@ -62,7 +62,7 @@ I think it's worth understanding these formulas not to implement them, but to kn
 BM25 has been around since the 1990s and information retrieval research keeps circling back to it. Given a query $q$ and document $d$ across a corpus $D$:
 
 $$
-\text{BM25}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{f(t, d) \cdot (k_1 + 1)}{f(t, d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{\text{avgdl}}\right)}
+\text{BM25}(d, q) = \sum_{t in q} \text{IDF}(t) \cdot \frac{f(t, d) \cdot (k_1 + 1)}{f(t, d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{\text{avgdl}}\right)}
 $$
 
 The IDF part rewards uncommon terms:
@@ -104,7 +104,7 @@ Dense retrieval handles paraphrases well, multilingual queries, and cases where 
 When you run BM25 and dense retrieval in parallel, you have two ranked lists on completely different score scales. BM25 might give values in $[0, 40]$, cosine similarity in $[-1, 1]$. You can't just add them. RRF sidesteps this by ignoring raw scores entirely and only looking at ranks:
 
 $$
-\text{RRF}(d) = \sum_{r \in R} \frac{1}{k + \text{rank}_r(d)}
+\text{RRF}(d) = \sum_{r in R} \frac{1}{k + \text{rank}_r(d)}
 $$
 
 where $k = 60$ is a smoothing constant and $\text{rank}_r(d)$ is the document's position in retriever $r$'s output.
@@ -302,7 +302,7 @@ Evaluate retrieval and generation separately. This sounds obvious and almost nob
 **MRR (Mean Reciprocal Rank):** for each query, the score is $\frac{1}{\text{rank}_q}$ where $\text{rank}_q$ is the position of the first correct result. Average over all queries:
 
 $$
-\text{MRR} = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{\text{rank}_q}
+\text{MRR} = \frac{1}{|Q|} \sum_{q in Q} \frac{1}{\text{rank}_q}
 $$
 
 Rank 1 = 1.0, rank 2 = 0.5, rank 10 = 0.1. It penalizes you hard for not getting the right document at the top.

@@ -5,7 +5,7 @@
     "sync-notes": "node scripts/sync-notes-assets.mjs",
     "predev": "node scripts/sync-notes-assets.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/sync-notes-assets.mjs",
+    "prebuild": "node scripts/sync-notes-assets.mjs && node scripts/validate-notes-frontmatter.mjs",
     "build": "next build",
     "start": "next start ",
     "lint": "next lint",
