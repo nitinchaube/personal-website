@@ -1,4 +1,4 @@
-0:["aChP5YYPNdl4GUwLeCO8d",[[["",{"children":["notes",{"children":[["slug","Primers/concurrency","c"],{"children":["__PAGE__?{\"slug\":[\"Primers\",\"concurrency\"]}",{}]}]}]},"$undefined","$undefined",true],"$L1",[[],"$L2"]]]]
+0:["1SdS88_OldTKsrU4kXdnp",[[["",{"children":["notes",{"children":[["slug","Primers/concurrency","c"],{"children":["__PAGE__?{\"slug\":[\"Primers\",\"concurrency\"]}",{}]}]}]},"$undefined","$undefined",true],"$L1",[[],"$L2"]]]]
 3:HL["/_next/static/css/9537db395470f9b8.css","style",{"crossOrigin":""}]
 4:HL["/_next/static/css/f3e5ec83311ebd6c.css","style",{"crossOrigin":""}]
 5:I{"id":5657,"chunks":["724:static/chunks/724-ce78eb0c29c5033d.js","386:static/chunks/386-a33c14f8ed691626.js","216:static/chunks/216-034a51bf4d416fe7.js","185:static/chunks/app/layout-09023611f54dcad0.js"],"name":"","async":false}
