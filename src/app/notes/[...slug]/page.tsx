@@ -20,8 +20,13 @@ export async function generateStaticParams() {
 export const dynamic = 'force-static';
 export const dynamicParams = false;
 
+/** Slug segments from the router may be percent-encoded (e.g. spaces in folder names). */
+function slugFromParams(segments: string[]): string {
+  return segments.map((s) => decodeURIComponent(s)).join('/');
+}
+
 export function generateMetadata({ params }: { params: { slug: string[] } }) {
-  const slug = params.slug.join('/');
+  const slug = slugFromParams(params.slug);
   const note = getNoteBySlug(slug);
   if (!note) return { title: "Nitin's Desk" };
   return {
@@ -31,7 +36,7 @@ export function generateMetadata({ params }: { params: { slug: string[] } }) {
 }
 
 export default async function NotePage({ params }: { params: { slug: string[] } }) {
-  const slug = params.slug.join('/');
+  const slug = slugFromParams(params.slug);
   const note = getNoteBySlug(slug);
   if (!note) notFound();
   const { prev, next } = getAdjacentNotes(slug);
@@ -41,6 +46,8 @@ export default async function NotePage({ params }: { params: { slug: string[] } 
     components: mdxComponentsFor(note.postDir),
     options: {
       mdxOptions: {
+        // `.md` notes use plain markdown so `{...}` in LaTeX is not parsed as JSX.
+        format: note.contentFormat,
         remarkPlugins: [remarkGfm, remarkMath],
         rehypePlugins: [
           rehypeSlug,

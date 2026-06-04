@@ -22,8 +22,12 @@ export type NoteSummary = NoteFrontmatter & {
   readingTimeText: string;
 };
 
+export type NoteContentFormat = 'md' | 'mdx';
+
 export type NoteFull = NoteSummary & {
   content: string;
+  /** `md` disables JSX parsing so LaTeX in `.md` notes is safe; `mdx` keeps MDX features. */
+  contentFormat: NoteContentFormat;
 };
 
 export type CategoryGroup = {

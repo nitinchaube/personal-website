@@ -72,11 +72,13 @@ function readNote(relPath: string): NoteFull | null {
   const frontmatter = data as NoteFrontmatter;
   const stats = readingTime(content);
   const { slug, category, postDir } = slugFromRelPath(relPath);
+  const contentFormat = /\.mdx$/i.test(relPath) ? 'mdx' : 'md';
 
   return {
     slug,
     category,
     postDir,
+    contentFormat,
     title: frontmatter.title,
     date: typeof frontmatter.date === 'string' ? frontmatter.date : new Date(frontmatter.date).toISOString().slice(0, 10),
     summary: frontmatter.summary,
