@@ -38,6 +38,27 @@ export type CategoryGroup = {
   posts: NoteSummary[];
 };
 
+/** A single note (leaf) in the folder tree. */
+export type NoteTreePost = {
+  type: 'post';
+  title: string;
+  /** Full slug including folder path, e.g. "SystemDesign/Subtopic/foo". */
+  slug: string;
+  date: string;
+};
+
+/** A folder (branch) in the folder tree; may contain nested folders and posts. */
+export type NoteTreeFolder = {
+  type: 'folder';
+  /** Prefix-stripped folder name, e.g. "Subtopic". */
+  name: string;
+  /** Pretty display label, e.g. "Sub Topic". */
+  displayName: string;
+  children: NoteTreeNode[];
+};
+
+export type NoteTreeNode = NoteTreePost | NoteTreeFolder;
+
 /** Lightweight payload used by the in-header search. Safe to ship to the client. */
 export type SearchEntry = {
   slug: string;

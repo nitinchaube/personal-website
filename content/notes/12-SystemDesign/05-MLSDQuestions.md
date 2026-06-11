@@ -7,8 +7,6 @@ tags: [System Design, Agents, LLM, LLMOps, AI]
 
 ## Q1) Design a YouTube Video Recommendation System? (Homepage and optimization for engagement)
 
--->
-
 - First - Which surface are we talking about? The homepage feed and the watch next sidebar behave pretty differently, since watch next leens heavily on the video you are currently watching. And second, what are we actually optimizing for *(Push them toward long-term user satisfaction / watch time, not CTR as clickbait optimizes CTR and hurts retention)*? Because that choice drives the whole design.
 - So homepage recommendations, and I am going to push back gently on "engagement". I'd optimize for long-term watch time and satisfaction rather than raw click through. If we optimize for pure CTR then we just learn to serve clickbait, which spikes short term clicks but hurts retention. So my north-star is expected watch time with guardrails on user satisfaction signals. Is this framing correct for the question?
 - The Single most important constraint here is scale. We have got on the order of billions of videos and we  need to return recommendations in tens of milliseconds. That immediately rules out scoring the whole corpus with a heavy model per request. So my whole architecture is going to be a funnel: a cheap, high-recall retrieval stage that takes billions of videos down to maybe a few hundred, and then an expensive, high-precision ranking stage on top of that. Let me walk through the flow and then go deep wherever you would like.
@@ -19,11 +17,11 @@ tags: [System Design, Agents, LLM, LLMOps, AI]
 - After ranking there's a re-ranking pass for the things a pure relevance model won't give me: diversity so I'm not showing ten near-identical videos, freshness, filtering out already watched content and policy and safety filters.
 - For evaluation, offline i'd track recall@k for retrieval and NDCG or AUC for ranking , but those only get me a candidate worth shipping, the real decision is an online A/B test on watch time and retention, with guardrail metrics so I don't quietly hurt the user experience.
 - And the last thing I'd want to flag is the hard problems. Code Start: new videos are actually handled okay by the two tower model because the video tower uses content features, but new users i'd fall back to popularity and context, and i'd add some exploration, a bandit or epsilon-greedy so fresh content and new users actually get impressions. That also helps with the feeback-loop problem whre the system just reinforces whatever it already shows. And for freshness specifically, ther ea neat trick which is feeding the age of each training example as a feature, then setting it near zero at serve time, so the model learns recency preference instead of being biased towerd older videos that have has more time to accumulate watches.
-- 
 
-  | ![image](./images/pasted_20260611-171320.png) | ![image](./images/pasted_20260611-171338.png) |
-  | --------------------------------------------- | --------------------------------------------- |
-  | ![image](./images/pasted_20260611-171347.png) | ![image](./images/pasted_20260611-171246.png) |
+![](assets/pasted_20260611-171320.png)
+![](assets/pasted_20260611-171338.png)
+![](assets/pasted_20260611-171347.png)
+![](assets/pasted_20260611-171246.png)
 
 ### Follow-up questions (deep dives the interviewer will push on)
 

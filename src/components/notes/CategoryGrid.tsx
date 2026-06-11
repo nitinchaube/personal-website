@@ -1,31 +1,40 @@
-import Link from 'next/link';
-import type { CategoryGroup } from '../../lib/notes-shared';
+import type { NoteTreeNode } from '../../lib/notes-shared';
+import NoteTree from './NoteTree';
 
 type Props = {
-  groups: CategoryGroup[];
+  nodes: NoteTreeNode[];
 };
 
-const CategoryGrid = ({ groups }: Props) => {
-  if (groups.length === 0) {
-    return <p className='notes-meta'>No notes yet. Drop a markdown file in <code>content/notes/</code> to get started.</p>;
+const CategoryGrid = ({ nodes }: Props) => {
+  if (nodes.length === 0) {
+    return (
+      <p className='notes-meta'>
+        No notes yet. Drop a markdown file in <code>content/notes/</code> to get started.
+      </p>
+    );
+  }
+
+  const topFolders = nodes.filter((n) => n.type === 'folder');
+  const loosePosts = nodes.filter((n) => n.type === 'post');
+
+  type Box = { key: string; displayName: string; children: NoteTreeNode[] };
+  const boxes: Box[] = topFolders.map((folder) => ({
+    key: `folder:${folder.type === 'folder' ? folder.name : ''}`,
+    displayName: folder.type === 'folder' ? folder.displayName : '',
+    children: folder.type === 'folder' ? folder.children : [],
+  }));
+  if (loosePosts.length > 0) {
+    boxes.push({ key: '__general__', displayName: 'General', children: loosePosts });
   }
 
   return (
-    <div className='grid grid-cols-1 items-start gap-6 sm:grid-cols-2 lg:grid-cols-3'>
-      {groups.map((group) => (
-        <section key={group.category ?? '__root__'} className='notes-box'>
+    <div className='columns-1 gap-6 sm:columns-2 lg:columns-3'>
+      {boxes.map((box) => (
+        <section key={box.key} className='notes-box mb-6 break-inside-avoid'>
           <header className='notes-box-header'>
-            <h2 className='notes-box-title'>{group.displayName}</h2>
+            <h2 className='notes-box-title'>{box.displayName}</h2>
           </header>
-          <ul className='notes-box-list'>
-            {group.posts.map((post) => (
-              <li key={post.slug}>
-                <Link href={`/notes/${post.slug}`} className='notes-box-link'>
-                  {post.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <NoteTree nodes={box.children} />
         </section>
       ))}
     </div>

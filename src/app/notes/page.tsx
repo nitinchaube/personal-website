@@ -1,4 +1,4 @@
-import { getCategoryGroups } from '../../lib/notes';
+import { getNoteTree } from '../../lib/notes';
 import CategoryGrid from '../../components/notes/CategoryGrid';
 
 export const metadata = {
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default function NotesIndexPage() {
-  const groups = getCategoryGroups();
+  const tree = getNoteTree();
 
   return (
     <main className='mx-auto max-w-5xl px-6 py-14 sm:px-8 sm:py-20'>
@@ -18,7 +18,7 @@ export default function NotesIndexPage() {
           are individual notes.
         </p>
       </header>
-      <CategoryGrid groups={groups} />
+      <CategoryGrid nodes={tree} />
     </main>
   );
 }

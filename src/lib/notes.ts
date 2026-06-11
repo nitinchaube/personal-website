@@ -11,6 +11,8 @@ import {
   type NoteFull,
   type NoteSummary,
   type NoteTag,
+  type NoteTreeFolder,
+  type NoteTreeNode,
   type SearchEntry,
   NOTE_TAGS,
   prettyName,
@@ -19,7 +21,16 @@ import {
 } from './notes-shared';
 
 export { NOTE_TAGS, formatDate, prettyName, stripOrderPrefix, stripOrderPrefixPath } from './notes-shared';
-export type { CategoryGroup, NoteFrontmatter, NoteFull, NoteSummary, NoteTag, SearchEntry } from './notes-shared';
+export type {
+  CategoryGroup,
+  NoteFrontmatter,
+  NoteFull,
+  NoteSummary,
+  NoteTag,
+  NoteTreeFolder,
+  NoteTreeNode,
+  SearchEntry,
+} from './notes-shared';
 
 const NOTES_DIR = path.join(process.cwd(), 'content', 'notes');
 
@@ -145,6 +156,44 @@ export function getSearchEntries(): SearchEntry[] {
     category: n.category,
     categoryDisplay: n.category ? prettyName(n.category) : null,
   }));
+}
+
+/**
+ * Build a nested folder tree of all (non-draft) notes, preserving the on-disk
+ * ordering (numeric prefixes like "01-foo" drive folder and file order, then
+ * the prefix is stripped for display and slugs). Folders named `assets` are
+ * already excluded by `walkNoteFiles`, so image folders never appear as topics.
+ *
+ * Returns the top-level nodes: a mix of folders (categories, possibly nested)
+ * and any root-level posts.
+ */
+export function getNoteTree(): NoteTreeNode[] {
+  const root: NoteTreeFolder = { type: 'folder', name: '', displayName: '', children: [] };
+
+  for (const { relPath } of walkNoteFiles(NOTES_DIR)) {
+    const note = readNote(relPath);
+    if (!note) continue; // skips drafts / invalid frontmatter
+
+    // Raw segments retain numeric prefixes so folder ordering is preserved.
+    const rawSegments = relPath.replace(/\.(md|mdx)$/i, '').split('/');
+    let cursor = root;
+
+    for (let i = 0; i < rawSegments.length - 1; i++) {
+      const name = stripOrderPrefix(rawSegments[i]);
+      let child = cursor.children.find(
+        (c): c is NoteTreeFolder => c.type === 'folder' && c.name === name,
+      );
+      if (!child) {
+        child = { type: 'folder', name, displayName: prettyName(name), children: [] };
+        cursor.children.push(child);
+      }
+      cursor = child;
+    }
+
+    cursor.children.push({ type: 'post', title: note.title, slug: note.slug, date: note.date });
+  }
+
+  return root.children;
 }
 
 /**

@@ -258,6 +258,65 @@
   text-underline-offset: 3px;
 }
 
+/* Nested folder tree on the notes index */
+.notes-root .notes-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notes-root .notes-tree-item {
+  margin: 0;
+}
+.notes-root .notes-tree-folder {
+  margin: 0;
+}
+.notes-root .notes-tree-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--notes-text);
+  padding: 2px 0;
+}
+/* Hide the native disclosure triangle so we can draw our own chevron. */
+.notes-root .notes-tree-summary::-webkit-details-marker {
+  display: none;
+}
+.notes-root .notes-tree-summary::marker {
+  content: '';
+}
+.notes-root .notes-tree-summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.notes-root .notes-tree-folder[open] > .notes-tree-summary::before {
+  transform: rotate(90deg);
+}
+.notes-root .notes-tree-summary:hover {
+  color: var(--notes-link);
+}
+/* Indent nested levels and add a guide line. */
+.notes-root .notes-tree-children {
+  margin-top: 8px;
+  margin-left: 7px;
+  padding-left: 12px;
+  border-left: 1px solid var(--notes-border);
+}
+
 .notes-root .notes-card-title {
   font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
   font-weight: 700;
