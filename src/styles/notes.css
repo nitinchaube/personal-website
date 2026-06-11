@@ -287,6 +287,26 @@
   opacity: 1;
 }
 
+/* Compact image grid: consecutive captionless images (empty alt) render as
+   bare <img> inside one paragraph and lay out as a tidy responsive grid. */
+.notes-root .prose p:has(> img) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.4em 0;
+}
+.notes-root .prose p > img {
+  width: calc(50% - 0.375rem);
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--notes-border);
+}
+@media (max-width: 640px) {
+  .notes-root .prose p > img {
+    width: 100%;
+  }
+}
+
 /* rehype-pretty-code styling */
 .notes-root .prose pre {
   overflow-x: auto;
