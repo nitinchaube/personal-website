@@ -445,3 +445,22 @@
   color: #999;
   margin-bottom: 0.5rem;
 }
+.notes-root .notes-toc-scroll {
+  /* top-24 (6rem) + heading + page padding */
+  max-height: calc(100vh - 8.5rem);
+  max-height: calc(100dvh - 8.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 0.35rem;
+}
+.notes-root .notes-toc-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.notes-root .notes-toc-scroll::-webkit-scrollbar-thumb {
+  background: var(--notes-border);
+  border-radius: 999px;
+}
+.notes-root .notes-toc-scroll::-webkit-scrollbar-thumb:hover {
+  background: #d8d5cd;
+}

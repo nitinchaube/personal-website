@@ -51,21 +51,23 @@ const Toc = ({ selector = '.notes-article' }: Props) => {
   return (
     <nav className='notes-toc'>
       <p className='notes-toc-heading'>On this page</p>
-      <ul className='list-none'>
-        {headings.map((h) => (
-          <li key={h.id} style={{ paddingLeft: h.level === 3 ? '0.85rem' : 0 }}>
-            <a
-              href={`#${h.id}`}
-              style={{
-                color: activeId === h.id ? 'var(--notes-text)' : undefined,
-                fontWeight: activeId === h.id ? 600 : 400,
-              }}
-            >
-              {h.text}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <div className='notes-toc-scroll'>
+        <ul className='list-none'>
+          {headings.map((h) => (
+            <li key={h.id} style={{ paddingLeft: h.level === 3 ? '0.85rem' : 0 }}>
+              <a
+                href={`#${h.id}`}
+                style={{
+                  color: activeId === h.id ? 'var(--notes-text)' : undefined,
+                  fontWeight: activeId === h.id ? 600 : 400,
+                }}
+              >
+                {h.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
     </nav>
   );
 };
