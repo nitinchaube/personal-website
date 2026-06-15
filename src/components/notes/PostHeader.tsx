@@ -1,4 +1,4 @@
-import { formatDate } from '../../lib/notes-shared';
+import { formatDate, slugifyHeading } from '../../lib/notes-shared';
 import type { NoteSummary } from '../../lib/notes-shared';
 
 type Props = {
@@ -8,7 +8,9 @@ type Props = {
 const PostHeader = ({ note }: Props) => {
   return (
     <header className='mb-10 sm:mb-12'>
-      <h1 className='notes-card-title text-[34px] sm:text-[40px] leading-tight'>{note.title}</h1>
+      <h1 id={slugifyHeading(note.title)} className='notes-card-title text-[34px] sm:text-[40px] leading-tight'>
+        {note.title}
+      </h1>
       <p className='notes-meta mt-3'>
         {formatDate(note.date)}
         <span className='mx-2'>·</span>

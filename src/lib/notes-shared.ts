@@ -83,6 +83,17 @@ export function prettyName(raw: string): string {
     .join(' ');
 }
 
+/** Slug for in-page anchors; kept close to rehype-slug / github-slugger output. */
+export function slugifyHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_/]+/g, '-')
+    .replace(/[^\w-]+/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 /**
  * Strip a leading numeric ordering prefix from a single path segment.
  *   "01-fundamentals"  -> "fundamentals"

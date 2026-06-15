@@ -426,17 +426,51 @@
 .notes-root .notes-toc {
   font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
   font-size: 13.5px;
-  color: var(--notes-text-muted);
   line-height: 1.55;
 }
-.notes-root .notes-toc a {
-  color: var(--notes-text-muted);
+.notes-root .notes-toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.notes-root .notes-toc-item {
+  margin: 0;
+}
+.notes-root .notes-toc-link {
+  color: var(--notes-link);
   text-decoration: none;
   display: block;
-  padding: 2px 0;
+  padding: 3px 0;
+  font-weight: 400;
+  transition: color 0.15s ease;
 }
-.notes-root .notes-toc a:hover {
+.notes-root .notes-toc-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.notes-root .notes-toc-link.is-active {
   color: var(--notes-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* Indent by heading depth: h1 flush, each level nests further in. */
+.notes-root .notes-toc-item--h1 {
+  padding-left: 0;
+}
+.notes-root .notes-toc-item--h1 .notes-toc-link {
+  font-weight: 600;
+}
+.notes-root .notes-toc-item--h2 {
+  padding-left: 0;
+}
+.notes-root .notes-toc-item--h3 {
+  padding-left: 0.85rem;
+}
+.notes-root .notes-toc-item--h4 {
+  padding-left: 1.7rem;
+}
+.notes-root .notes-toc-item--h5 {
+  padding-left: 2.55rem;
 }
 .notes-root .notes-toc-heading {
   font-size: 11.5px;
