@@ -1,5 +1,5 @@
 ---
-title: "Core of AI Agents"
+title: "AI Agents Primer"
 date: 2026-05-27
 summary: "A clear, diagram-driven revision guide to the core of Agentic AI: the agent loop, workflow vs agent design patterns, planning, memory, tool use, multi-agent systems, and the open challenges."
 tags: [Agents, Planning, Memory, Tools, ReAct, CodeAct, MCP, Multi-Agent, Design-Patterns]
