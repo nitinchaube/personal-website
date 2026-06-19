@@ -39,37 +39,37 @@ If the database matches the golden answer key perfectly, the AI passes. If it ma
 
 Each task in τ-bench is a **partially observable Markov decision process (POMDP)**:
 
-$$  
-\mathcal{M} = (\mathcal{S}, \mathcal{A}, \mathcal{O}, \mathcal{T}, \mathcal{R}, \mathcal{U})  
+$$
+M = (S, A, O, T, R, U)
 $$
 
-| Symbol                                                                           | Meaning                                   |
-| -------------------------------------------------------------------------------- | ----------------------------------------- |
-| $\mathcal{S}$                                                                    | State space                               |
-| $\mathcal{A}$                                                                    | Action space                              |
-| $\mathcal{O}$                                                                    | Observation space                         |
-| $\mathcal{T}: \mathcal{S} \times \mathcal{A} \to \mathcal{S} \times \mathcal{O}$ | Transition function                       |
-| $\mathcal{R}: \mathcal{S} \to [0, 1]$                                            | Reward function                           |
-| $\mathcal{U}$                                                                    | Instruction space (hidden user task spec) |
+| Symbol | Meaning |
+| --- | --- |
+| $S$ | State space |
+| $A$ | Action space |
+| $O$ | Observation space |
+| $T: S \times A \to S \times O$ | Transition function |
+| $R: S \to [0, 1]$ | Reward function |
+| $U$ | Instruction space (hidden user task spec) |
 
 The agent interacts with **two** subsystems at once:
 
-$$  
-\mathcal{S} = \mathcal{S}*{\text{db}} \otimes \mathcal{S}*{\text{user}}, \quad  
-\mathcal{A} = \mathcal{A}*{\text{db}} \cup \mathcal{A}*{\text{user}}, \quad  
-\mathcal{O} = \mathcal{O}*{\text{db}} \cup \mathcal{O}*{\text{user}}  
+$$
+S = S_{db} \otimes S_{user}, \quad
+A = A_{db} \cup A_{user}, \quad
+O = O_{db} \cup O_{user}
 $$
 
-- **Database side:** $\mathcal{S}*{\text{db}}$ is the JSON database state (hidden from both agent and user). Write/read actions $a*{\text{db}}$ call Python API tools. Transitions are **deterministic**:
+- **Database side:** $S_{db}$ is the JSON database state (hidden from both agent and user). Write/read actions $a_{db}$ call Python API tools. Transitions are **deterministic**:
 
-$$  
-\mathcal{T}*{\text{db}}: (s*{\text{db}}, a_{\text{db}}) \mapsto (s'*{\text{db}}, o*{\text{db}})  
+$$
+T_{db}: (s_{db}, a_{db}) \mapsto (s'_{db}, o_{db})
 $$
 
-- **User side:** $\mathcal{S}*{\text{user}}$ is the hidden user instruction plus chat history. Agent messages $a*{\text{user}}$ are natural language. Transitions are **stochastic** (LM-sampled user replies):
+- **User side:** $S_{user}$ is the hidden user instruction plus chat history. Agent messages $a_{user}$ are natural language. Transitions are **stochastic** (LM-sampled user replies):
 
-$$  
-\mathcal{T}*{\text{user}}: (s*{\text{user}}, a_{\text{user}}) \mapsto (s'*{\text{user}}, o*{\text{user}})  
+$$
+T_{user}: (s_{user}, a_{user}) \mapsto (s'_{user}, o_{user})
 $$
 
 The episode ends when the simulated user emits `###STOP###`. The agent never sees the user instruction or raw database; it only sees policy text, tool observations, and user messages.
@@ -78,7 +78,7 @@ The episode ends when the simulated user emits `###STOP###`. The agent never see
 
 Each task $i$ has:
 
-1. A **user instruction** $u_i \in \mathcal{U}$ (hidden; drives the user simulator).
+1. A **user instruction** $u_i \in U$ (hidden; drives the user simulator).
 2. A **ground-truth annotation** $G_i$ with:
   - expected database write actions, and
   - optional required output substrings for user-facing answers.
@@ -98,16 +98,16 @@ Task design enforces **one unique correct outcome** under domain policy. Ambigui
 
 τ-bench grades **outcomes**, not trajectories. The per-episode reward is binary:
 
-$$  
-r = r_{\text{action}} \times r_{\text{output}} \in 0, 1  
+$$
+r = r_{action} \times r_{output} \in \{0, 1\}
 $$
 
-### 1. Database correctness ($r_{\text{action}}$)
+### 1. Database correctness ($r_{action}$)
 
-Let $s_{\text{db}}^{(T)}$ be the final database after episode $T$ steps, and $s_{\text{db}}^{*}$ the unique ground-truth database for task $i$.
+Let $s_{db}^{(T)}$ be the final database after episode $T$ steps, and $s_{db}^{*}$ the unique ground-truth database for task $i$.
 
-$$  
-r_{\text{action}} = \mathbb{1}\left[s_{\text{db}}^{(T)} = s_{\text{db}}^{*}\right]  
+$$
+r_{action} = 1[s_{db}^{(T)} = s_{db}^{*}]
 $$
 
 In practice this is a full structural equality check on the database JSON (all tables, fields, and write actions must match exactly). Read-only tool calls along the way do not matter; only the **final world state** counts.
@@ -122,22 +122,22 @@ return_delivered_order_items(
 )
 ```
 
-Any extra write, wrong argument, or missing write → $r_{\text{action}} = 0$.
+Any extra write, wrong argument, or missing write → $r_{action} = 0$.
 
-### 2. Output completeness ($r_{\text{output}}$)
+### 2. Output completeness ($r_{output}$)
 
-Let $\mathcal{M}_{\text{agent}}$ be the multiset of all agent-to-user messages in the episode, and $\mathcal{O}^{*} = o_1, \ldots, o_m$ the required output substrings from the annotation.
+Let $M_{agent}$ be the multiset of all agent-to-user messages in the episode, and $O^{*} = \{o_1, \ldots, o_m\}$ the required output substrings from the annotation.
 
-$$  
-r_{\text{output}} = \prod_{j=1}^{m} \mathbb{1}\left[\exists m \in \mathcal{M}_{\text{agent}} : o_j \subseteq m\right]  
+$$
+r_{output} = \prod_{j=1}^{m} 1[\exists\, msg \in M_{agent} : o_j \subseteq msg]
 $$
 
 So every required string must appear as a **substring** in at least one agent message. In the example above, the agent must mention `"54.04"` and `"41.64"` (refund/savings figures).
 
 ### Combined reward
 
-$$  
-r = r_{\text{action}} \cdot r_{\text{output}}  
+$$
+r = r_{action} \cdot r_{output}
 $$
 
 Both factors must be 1. There is no partial credit.
@@ -148,8 +148,8 @@ Both factors must be 1. There is no partial credit.
 
 For a benchmark run over tasks $i = 1, \ldots, N$:
 
-$$  
-\bar{r} = \frac{1}{N} \sum_{i=1}^{N} r_i = \mathbb{E}_{\text{task}}[r]  
+$$
+\bar{r} = \frac{1}{N} \sum_{i=1}^{N} r_i = E_{task}[r]
 $$
 
 This is what τ-bench reports as the main comparison metric when $n = 1$ trial per task.
@@ -166,28 +166,27 @@ Agents are stochastic (sampling, temperature, varied user phrasing). τ-bench ru
 
 Unbiased estimator per task:
 
-$$  
-\widehat{\text{pass}^k}_i = \frac{\binom{c_i}{k}}{\binom{n}{k}}  
+$$
+pass^k_i = \frac{\binom{c_i}{k}}{\binom{n}{k}}
 $$
 
 Aggregate across tasks:
 
-$$  
-\text{pass}^k = \mathbb{E}*{\text{task}}\left[\frac{\binom{c}{k}}{\binom{n}{k}}\right]*  
-*\approx \frac{1}{N} \sum*{i=1}^{N} \frac{\binom{c_i}{k}}{\binom{n}{k}}  
+$$
+pass^k = E_{task}\left[\frac{\binom{c}{k}}{\binom{n}{k}}\right] \approx \frac{1}{N} \sum_{i=1}^{N} \frac{\binom{c_i}{k}}{\binom{n}{k}}
 $$
 
 Interpretation: $\binom{c}{k}/\binom{n}{k}$ is the hypergeometric probability that a uniform random $k$-subset of the $n$ trials contains only successes.
 
 When trials are approximately i.i.d. with per-trial success rate $p_i = c_i/n$:
 
-$$  
-\text{pass}^k \approx p_i^k  
+$$
+pass^k \approx p_i^k
 $$
 
 Reliability **compounds multiplicatively**. At $p = 0.6$:
 
-| $k$ | $\text{pass}^k \approx p^k$ |
+| $k$ | $pass^k \approx p^k$ |
 | --- | --------------------------- |
 | 1   | 0.60                        |
 | 4   | 0.13                        |
@@ -199,36 +198,36 @@ That is the "consistency cliff" τ-bench exposes.
 
 **Question:** If you draw $k$ trials, what's the probability **at least one** succeeds?
 
-$$  
-\widehat{\text{pass@}k}_i = 1 - \frac{\binom{n - c_i}{k}}{\binom{n}{k}}  
+$$
+pass@k_i = 1 - \frac{\binom{n - c_i}{k}}{\binom{n}{k}}
 $$
 
-$$  
-\text{pass@}k = \mathbb{E}_{\text{task}}\left[1 - \frac{\binom{n - c}{k}}{\binom{n}{k}}\right]  
+$$
+pass@k = E_{task}\left[1 - \frac{\binom{n - c}{k}}{\binom{n}{k}}\right]
 $$
 
 pass@k rewards "eventually find a working path" (good for code generation with retries). pass^k rewards "never fail" (good for unattended customer service).
 
 ### Special case: $k = 1$
 
-$$  
-\text{pass}^1 = \text{pass@}1 = \mathbb{E}[r] = \mathbb{E}\left[\frac{c}{n}\right] = \bar{r}  
+$$
+pass^1 = pass@1 = E[r] = E\left[\frac{c}{n}\right] = \bar{r}
 $$
 
 ### Worked example
 
 Task run $n = 8$ times; $c = 5$ successes.
 
-$$  
-\widehat{\text{pass}^1} = \frac{5}{8} = 0.625  
+$$
+pass^1 = \frac{5}{8} = 0.625
 $$
 
-$$  
-\widehat{\text{pass}^4} = \frac{\binom{5}{4}}{\binom{8}{4}} = \frac{5}{70} \approx 0.071  
+$$
+pass^4 = \frac{\binom{5}{4}}{\binom{8}{4}} = \frac{5}{70} \approx 0.071
 $$
 
-$$  
-\widehat{\text{pass@}4} = 1 - \frac{\binom{3}{4}}{\binom{8}{4}} = 1 - 0 = 1.0  
+$$
+pass@4 = 1 - \frac{\binom{3}{4}}{\binom{8}{4}} = 1 - 0 = 1.0
 $$
 
 Same agent: 62.5% single-shot, 7.1% chance of four consecutive wins, but with four tries you'd always get at least one success. That gap is exactly why τ-bench reports both.
