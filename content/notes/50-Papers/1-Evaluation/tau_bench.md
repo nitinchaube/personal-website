@@ -158,7 +158,11 @@ This is what τ-bench reports as the main comparison metric when $n = 1$ trial p
 
 ## Reliability metrics: pass^k vs pass@k
 
-Agents are stochastic (sampling, temperature, varied user phrasing). τ-bench runs each task for $n$ independent trials. For task $i$, let $c_i$ be the number of trials with $r = 1$.
+### Why a single run is not enough
+
+Standard benchmarks use **pass@1**: did the agent get it right on the first try? But agents are stochastic (sampling temperature, varied user phrasing), so one green run tells you almost nothing. In customer service, an agent that fails 15% of the time is a disaster, it corrupts data and angers customers at scale. What we actually need to measure is **consistency**: can the agent do the *same* task correctly, over and over?
+
+To capture this, τ-bench runs each task for $n$ independent trials. For task $i$, let $c_i$ be the number of trials that succeeded ($r = 1$). From these two numbers ($n$ trials, $c$ successes) we can estimate two very different metrics.
 
 ### pass^k (consistency — the τ-bench headline metric)
 
@@ -187,12 +191,12 @@ $$
 Reliability **compounds multiplicatively**. At $p = 0.6$:
 
 | $k$ | $pass^k \approx p^k$ |
-| --- | --------------------------- |
-| 1   | 0.60                        |
-| 4   | 0.13                        |
-| 8   | 0.017                       |
+| --- | --- |
+| 1 | 0.60 |
+| 4 | 0.13 |
+| 8 | 0.017 |
 
-That is the "consistency cliff" τ-bench exposes.
+This is the **consistency cliff**: an agent that looks decent at 60% single-shot collapses to ~1.7% when asked to succeed eight times in a row. Being smart is not the same as being reliable.
 
 ### pass@k (best-of-k — the coding-benchmark metric)
 
@@ -246,20 +250,19 @@ pass_hat_k = mean(comb(c, k) / comb(n, k) for c in c_per_task.values())
 
 ---
 
-## The Ultimate Test (Pass^k)
+## Benchmark results
 
-- Standard AI tests use a metric called pass@1. This just means, "Did the AI get it right on the first try?" But in the real world of customer service, getting it right once isn't good enough. If a company processes thousands of automated returns a day, an AI that fails 15% of the time is a disaster. It creates corrupted data and angry customers.
-- To measure true reliability, tau-bench uses a much harsher metric called pass^k. This measures the probability that an AI can complete the *exact same task perfectly, k times in a row* (formally: all $k$ randomly chosen trials succeed).
-- When tested this way, the results are shocking. An AI might have a 60% success rate on its first try, but when asked to do it successfully four times in a row, its score can drop to below 30%. This "consistency cliff" proves that being smart isn't the same as being reliable.
+Reported numbers for function-calling agents (pass^1 and pass^4 per domain):
 
-### Reported results (paper, function-calling agents)
+| Model | τ-retail pass^1 | τ-airline pass^1 | τ-retail pass^4 | τ-airline pass^4 |
+| --- | --- | --- | --- | --- |
+| Claude 3.5 Sonnet | 0.692 | 0.460 | 0.462 | 0.225 |
+| GPT-4o | 0.604 | 0.420 | 0.491 | 0.200 |
 
-| Model             | τ-retail pass^1 | τ-airline pass^1 | τ-retail pass^8 | τ-airline pass^8 |
-| ----------------- | --------------- | ---------------- | --------------- | ---------------- |
-| GPT-4o            | ~60%            | ~42%             | < 25%           | lower still      |
-| Claude 3.5 Sonnet | ~69%            | ~46%             | ~similar cliff  | ~similar cliff   |
+Two findings stand out:
 
-Even SOTA models solve < 50% of tasks on τ-airline pass^1, and pass^8 in retail drops below 25% for all tested models , far from production-ready reliability.
+- Even SOTA models solve **< 50%** of τ-airline tasks on the first try (airline is harder than retail due to more complex policy rules around payments, baggage, and cancellations).
+- Reliability drops sharply: **pass^8 falls below 25% in retail** for all tested models, far from production-ready. The dominant failure mode is tool misuse: calling the wrong API, passing wrong parameters, or skipping a required call before committing to the user.
 
 ---
 
