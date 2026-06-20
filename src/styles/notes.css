@@ -26,6 +26,16 @@
   color: var(--notes-link);
 }
 
+/* The global ::selection uses --color-accent, which is only set by the portfolio
+   home page's updateColors(). On /notes that never runs, so it stays transparent
+   and selected text shows no highlight. Give the notes theme its own highlight. */
+.notes-root ::selection {
+  background-color: rgba(26, 115, 232, 0.22);
+}
+.notes-root ::-moz-selection {
+  background-color: rgba(26, 115, 232, 0.22);
+}
+
 .notes-root .notes-nav {
   border-bottom: 1px solid var(--notes-border);
   background: var(--notes-surface);
