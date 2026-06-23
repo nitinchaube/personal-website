@@ -1,52 +1,414 @@
 ---
 title: "Concurrency in Python"
-date: 2026-05-13
-summary: "Mental models for sync, threads, asyncio, and the primitives that coordinate async tasks."
+date: 2026-06-22
+summary: "Single source for Python concurrency — the GIL, threads, multiprocessing, concurrent.futures, asyncio, every synchronization primitive, and the patterns and pitfalls that tie them together, explained simply."
 tags: [Foundations]
 ---
 
-Working note on how Python handles concurrent work — from the GIL to the event loop and `asyncio` coordination primitives.
+This is my **single source** for doing concurrent work in Python — from the GIL up through threads, processes, and `asyncio`, including every coordination primitive and the patterns/pitfalls that show up in real code and interviews. Each idea comes with a plain analogy, runnable code, and the gotcha that bites people.
+
+> **The one decision that drives everything:** is your bottleneck **waiting** (network, disk, database) or **computing** (math, parsing, crunching)? Waiting → `asyncio` or threads. Computing → processes. Everything below is a consequence of that split, which exists because of the GIL.
 
 ---
 
-## Mental model: the waiter analogy
+## Mental model: the restaurant analogy
 
-1. **Synchronous (normal Python):** One waiter takes an order, walks to the kitchen, and stands there until the food is ready.
-2. **Multithreading:** You hire ten waiters. They can all stand in the kitchen at once. It is faster but expensive.
-3. **Asyncio:** One waiter takes an order, hands it to the kitchen, and immediately goes to take another order. When the kitchen bell rings (an I/O event), the waiter returns to finish the first task. The waiter is rarely idle.
+1. **Synchronous (normal Python):** One waiter takes an order, walks to the kitchen, and stands there until the food is ready. Nothing else happens meanwhile.
+2. **Multithreading:** You hire ten waiters who share one kitchen. They take turns at the stove (the GIL lets only one cook Python at a time), but while one waits for the oven, another can work. Great when there's a lot of *waiting*.
+3. **Asyncio:** One very efficient waiter takes an order, hands it to the kitchen, and immediately takes another order. When a kitchen bell rings (an I/O event), the waiter returns to that table. One person, almost never idle.
+4. **Multiprocessing:** You build ten separate restaurants, each with its own kitchen and staff. True parallel cooking, but they can't share ingredients directly — anything passed between them must be boxed up and shipped (pickled).
 
 ---
 
-## Multiprocessing, multithreading, and asyncio
+## The big picture: processes vs threads vs asyncio
 
 | Feature | Multiprocessing | Multithreading | Asyncio |
 | --- | --- | --- | --- |
-| Workers | Multiple OS processes | Multiple OS threads | One thread (usually) |
-| Memory | Separate (higher usage) | Shared (lower usage) | Shared (very low overhead) |
-| Who switches tasks? | Operating system | Operating system | The Python event loop |
-| Bypasses Python's GIL? | Yes | No | No (does not need to) |
+| Unit of work | OS processes | OS threads | Coroutines (one thread) |
+| Memory | Separate per process | Shared within process | Shared, very low overhead |
+| Who switches tasks? | The OS (preemptive) | The OS (preemptive) | The event loop (cooperative) |
+| Runs Python in parallel? | **Yes** (real cores) | No (GIL serializes bytecode) | No (single thread) |
+| Switch cost | High (new process) | Medium (thread) | Tiny (function call-ish) |
+| Best for | CPU-bound Python | Blocking I/O with sync libraries | High-volume async I/O |
+| Data sharing | IPC / pickling | Direct (needs locks) | Direct (needs awaits-aware care) |
+| Failure blast radius | Isolated (one process crash) | Shared (can corrupt state) | Shared |
+
+**Preemptive vs cooperative** is the deepest distinction: threads can be paused by the OS *anywhere* (even mid-statement), so shared data needs locks. Asyncio only switches at `await` points, so you know exactly where interruptions can happen.
 
 ---
 
-## The GIL and CPU-bound vs I/O-bound work
+## The GIL (Global Interpreter Lock) — the thing to actually understand
 
-CPython has a **Global Interpreter Lock (GIL):** only one thread executes Python bytecode at a time. Threads can still help when work **releases** the GIL (many C extensions, I/O waits, some numeric libraries). They do **not** parallelize pure Python CPU-heavy loops across cores.
+CPython protects its internal state (reference counts, object memory) with a single global lock: **only one thread executes Python bytecode at a time.** That's the GIL.
 
-| Kind of work | Typical fit |
+Consequences:
+
+- **Threads do not speed up pure-Python CPU work.** Four threads summing numbers in Python run no faster than one — they take turns holding the GIL.
+- **Threads still help for I/O.** When a thread blocks on a socket/file/`time.sleep`, it **releases** the GIL so others can run. Same for many C extensions (NumPy heavy math, `hashlib`, compression, database drivers) that release the GIL around native work.
+- The interpreter forces a switch roughly every 5 ms (`sys.getswitchinterval()`), or when a thread blocks — so even one thread can be paused between any two bytecodes.
+
+**Why it exists:** it makes CPython's memory management simple and fast for single-threaded code, and keeps C extensions easy to write. The cost is no free multi-core for Python code.
+
+**Free-threaded Python (3.13+, PEP 703):** experimental builds can run *without* the GIL, giving real thread parallelism for Python code. Toggle/check it:
+
+```python
+import sys
+print(sys._is_gil_enabled())   # False on a free-threaded build with GIL off
+```
+
+It's opt-in and still maturing (some C extensions need updates), but it's the long-term direction. Until it's the default, assume the GIL is there and reach for **processes** when you need parallel Python compute.
+
+---
+
+## CPU-bound vs I/O-bound (how to tell, and what to pick)
+
+The single most important classification:
+
+| Kind of work | What it does most | Reach for |
+| --- | --- | --- |
+| **I/O-bound** | *Waits* on network, disk, DB, subprocess | `asyncio` (with async libs) or threads (for blocking libs) |
+| **CPU-bound** (pure Python) | *Computes* — loops, parsing, math in Python | **`multiprocessing`** / `ProcessPoolExecutor` |
+| **CPU-bound** in native code that releases the GIL | Heavy NumPy / C extension math | Threads or processes both work |
+
+**How to tell:** if your function spends its time on `requests.get`, `open().read`, `cursor.execute`, or `await`, it's I/O-bound. If it spends time in `for` loops, string/JSON crunching, or math in plain Python, it's CPU-bound. When unsure, profile — don't guess.
+
+**Rule of thumb:** `asyncio` shines when you `await` I/O a lot. If a function would **block the thread for milliseconds+** without an `await`, keep it off the event loop (offload it — see below).
+
+---
+
+## Quick decision guide
+
+```text
+Is the work mostly WAITING or COMPUTING?
+
+  WAITING (I/O-bound)
+     |
+     |-- Using async libraries (aiohttp, asyncpg, httpx)?  --> asyncio
+     |-- Stuck with blocking libraries (requests, an ORM)? --> threads / ThreadPoolExecutor
+     |
+  COMPUTING (CPU-bound)
+     |
+     |-- Pure Python number/text crunching?  --> multiprocessing / ProcessPoolExecutor
+     |-- Already in NumPy / C that frees GIL? --> threads are fine too
+```
+
+The rest of this note is the three toolkits in detail, then the primitives and patterns that span them.
+
+---
+
+# Part I — Threads
+
+Threads share memory inside one process. Cheap to start, great for overlapping **blocking I/O**, but you pay for the shared memory with the need to synchronize.
+
+## Creating threads with `threading`
+
+```python
+import threading, time
+
+def download(name: str) -> None:
+    print(f"start {name}")
+    time.sleep(1)          # simulates a blocking I/O wait (releases the GIL)
+    print(f"done {name}")
+
+threads = [threading.Thread(target=download, args=(f"file{i}",)) for i in range(3)]
+for t in threads:
+    t.start()              # begins running concurrently
+for t in threads:
+    t.join()               # wait for it to finish
+# All three sleeps overlap -> ~1s total, not 3s.
+```
+
+- **`target` / `args`** — the function and its arguments.
+- **`.start()`** runs it on a new OS thread; **`.join()`** blocks until it finishes.
+- **Daemon threads** (`Thread(..., daemon=True)`) are background threads the program won't wait for — they're killed when the main program exits. Use for things like heartbeat loggers, never for work that must finish.
+
+## `concurrent.futures.ThreadPoolExecutor` — the API you should usually use
+
+Manually managing threads is error-prone. The high-level pool handles creation, reuse, and result collection:
+
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+
+def work(n: int) -> int:
+    time.sleep(0.01)
+    return n * n
+
+with ThreadPoolExecutor(max_workers=4) as ex:
+    # map: keeps input order, like a parallel map()
+    print(list(ex.map(work, range(5))))           # [0, 1, 4, 9, 16]
+
+    # submit + as_completed: handle results as they finish
+    futures = [ex.submit(work, i) for i in range(5)]
+    for fut in as_completed(futures):
+        print(fut.result())                       # arrives in completion order
+```
+
+- **`submit(fn, *args)`** returns a **`Future`** immediately; call `.result()` (blocks) or `.exception()` later.
+- **`map(fn, iterable)`** is the easy path — results in input order; exceptions re-raise when you read them.
+- **`as_completed(futures)`** yields futures the moment each finishes — good for streaming results or showing progress.
+- The `with` block calls `shutdown(wait=True)`, so it won't return until everything is done.
+
+## Race conditions — why shared state is dangerous
+
+A statement like `counter += 1` looks atomic but isn't. It compiles to **four** bytecodes:
+
+```python
+import dis
+def f():
+    global counter
+    counter += 1
+dis.dis(f)
+#   LOAD_GLOBAL   counter   <- read
+#   LOAD_CONST    1
+#   BINARY_OP     +=        <- add
+#   STORE_GLOBAL  counter   <- write
+```
+
+If the OS pauses a thread between the **read** and the **write**, another thread can read the same old value, and one increment is lost.
+
+```python
+import threading
+
+counter = 0
+def bump():
+    global counter
+    for _ in range(100_000):
+        counter += 1
+
+threads = [threading.Thread(target=bump) for _ in range(4)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(counter)   # MAY be < 400000 — lost updates (depends on timing / Python build)
+```
+
+Whether the loss shows up depends on timing and version, which is exactly what makes these bugs nasty: they pass in testing and fail in production. **Never reason about "is this atomic?" — protect shared mutable state with a lock.**
+
+> **What *is* atomic in CPython?** A few single-bytecode operations (e.g. `list.append`, `dict[key] = value`, swapping a single name) happen to be atomic *today*. Don't rely on it — it's a CPython implementation detail, not a language guarantee, and read-modify-write (`+=`, `if x: x = ...`) never is.
+
+## Synchronization primitives (`threading`)
+
+### Lock — the one-person bathroom
+
+```python
+lock = threading.Lock()
+with lock:                 # acquire; auto-release on exit
+    counter += 1           # only one thread in here at a time
+```
+
+A thread that tries to enter while the lock is held **blocks** until it's free. Always prefer the `with` form so the lock releases even on exceptions.
+
+### RLock (reentrant lock) — re-enter what you already hold
+
+A plain `Lock` deadlocks if the *same* thread acquires it twice (e.g. a method holding the lock calls another method that also wants it). `RLock` lets the owning thread re-acquire it, counting acquisitions:
+
+```python
+rlock = threading.RLock()
+def outer():
+    with rlock:
+        inner()            # would deadlock with a plain Lock
+def inner():
+    with rlock:            # same thread re-acquires -> fine
+        ...
+```
+
+### Semaphore — cap how many at once
+
+A lock allows **1**; a semaphore allows **N**. Classic use: limit concurrency against an external service.
+
+```python
+sem = threading.Semaphore(5)     # at most 5 concurrent
+def fetch(url):
+    with sem:
+        ...                       # only 5 threads run this block simultaneously
+```
+
+### Event — broadcast a "go" signal
+
+One thread flips a flag; others wait for it. Good for "config loaded, start working".
+
+```python
+ready = threading.Event()
+def worker():
+    ready.wait()                  # blocks until set()
+    print("go!")
+# elsewhere:
+ready.set()                       # wakes every waiter
+```
+
+### Condition — wait until state matches a predicate
+
+A lock plus a notification channel, for producer/consumer style coordination.
+
+```python
+cond = threading.Condition()
+items = []
+def consumer():
+    with cond:
+        cond.wait_for(lambda: len(items) > 0)   # releases lock while waiting
+        item = items.pop()
+def producer():
+    with cond:
+        items.append(42)
+        cond.notify()                            # wake one waiter
+```
+
+### Barrier — everyone meets here before anyone continues
+
+```python
+barrier = threading.Barrier(3)    # all 3 threads wait here, then proceed together
+def phase():
+    do_part_one()
+    barrier.wait()                # rendezvous point
+    do_part_two()                 # nobody starts part two until all finished part one
+```
+
+## `queue.Queue` — thread-safe handoff (no manual locks)
+
+The cleanest way to share work between threads is a queue, which handles locking internally. This is the **producer/consumer** pattern.
+
+```python
+import threading, queue
+
+q = queue.Queue(maxsize=10)       # maxsize gives backpressure
+
+def producer():
+    for i in range(5):
+        q.put(i)                  # blocks if full
+    q.put(None)                   # sentinel = "no more work"
+
+def consumer():
+    while True:
+        item = q.get()            # blocks if empty
+        if item is None:
+            break
+        print("processed", item * 10)
+        q.task_done()
+
+p = threading.Thread(target=producer)
+c = threading.Thread(target=consumer)
+p.start(); c.start(); p.join(); c.join()
+```
+
+Variants: **`LifoQueue`** (stack) and **`PriorityQueue`** (lowest first). Prefer a queue over hand-rolled locks whenever you're passing data between threads.
+
+## Deadlock, livelock, starvation
+
+The three classic ways concurrency goes wrong:
+
+- **Deadlock:** two threads each hold a lock the other needs, so both wait forever.
+
+  ```python
+  # Thread 1: with A:  with B: ...
+  # Thread 2: with B:  with A: ...   <- crossed order = deadlock
+  ```
+  **Fixes:** always acquire locks in a **consistent global order**; use `acquire(timeout=...)`; or avoid holding multiple locks.
+
+- **Livelock:** threads keep responding to each other and changing state but make no progress (two people stepping aside in a hallway, repeatedly).
+- **Starvation:** one thread never gets scheduled / never acquires a contended lock because others keep winning it.
+
+> Best defense: minimize shared mutable state. Pass data through queues, keep critical sections tiny, and don't hold a lock while doing I/O.
+
+---
+
+# Part II — Processes
+
+When the work is **CPU-bound Python**, threads can't help (GIL). Separate processes each get their own interpreter and GIL, so they run on real cores in parallel. The cost: no shared memory — data crosses process boundaries by **pickling**.
+
+## `ProcessPoolExecutor` — parallel CPU work, same API as threads
+
+The high-level pool mirrors `ThreadPoolExecutor`, so switching from threads to processes is often a one-word change.
+
+```python
+from concurrent.futures import ProcessPoolExecutor
+import math
+
+def is_prime(n: int) -> bool:
+    if n < 2: return False
+    for i in range(2, math.isqrt(n) + 1):
+        if n % i == 0:
+            return False
+    return True
+
+if __name__ == "__main__":                       # REQUIRED guard (see start methods)
+    nums = [112272535095293, 112582705942171, 15]
+    with ProcessPoolExecutor() as ex:            # defaults to os.cpu_count() workers
+        print(list(ex.map(is_prime, nums)))      # [True, True, False] — runs on multiple cores
+```
+
+This actually uses all your cores; the same loop with `ThreadPoolExecutor` would be no faster than single-threaded.
+
+## `multiprocessing` directly: `Process` and `Pool`
+
+```python
+from multiprocessing import Process, Pool
+
+def task(n):
+    return n * n
+
+if __name__ == "__main__":
+    # One-off process
+    p = Process(target=task, args=(10,))
+    p.start(); p.join()
+
+    # Pool of workers
+    with Pool(processes=4) as pool:
+        print(pool.map(task, range(5)))          # [0, 1, 4, 9, 16]
+        # imap / imap_unordered stream results; apply_async for single calls
+```
+
+## Sharing data between processes
+
+Because memory isn't shared, you need explicit channels:
+
+| Tool | Use it for |
 | --- | --- |
-| **I/O-bound** (network, disk waits) | `asyncio` (cooperative) or threads (blocking APIs) |
-| **CPU-bound** Python-heavy | **`multiprocessing`** or **`concurrent.futures.ProcessPoolExecutor`** so work runs in other processes |
-| **CPU-bound** already in native code that releases the GIL | Threads or processes, depending on the library |
+| **`multiprocessing.Queue`** | Stream items between processes (producer/consumer across cores) |
+| **`Pipe`** | A fast two-endpoint channel between exactly two processes |
+| **`Value` / `Array`** | A few shared numbers in shared memory, guarded by a lock |
+| **`shared_memory.SharedMemory`** | Zero-copy sharing of large buffers (e.g. NumPy arrays) — 3.8+ |
+| **`Manager`** | A server process hosting shared `list` / `dict` / etc. (convenient, slower) |
 
-**Rule of thumb:** `asyncio` shines when you await I/O a lot. If a function would **block the thread for milliseconds+** without hitting `await`, keep it off the main loop (see below).
+```python
+from multiprocessing import Process, Queue
+
+def worker(q):
+    q.put("result from child")
+
+if __name__ == "__main__":
+    q = Queue()
+    p = Process(target=worker, args=(q,))
+    p.start()
+    print(q.get())                                # "result from child"
+    p.join()
+```
+
+## Start methods & pickling gotchas
+
+How a child process is born differs by platform:
+
+- **`fork`** (Linux default historically): clones the parent's memory — fast, but inherits locks/threads in a risky state.
+- **`spawn`** (Windows, and macOS default): starts a fresh interpreter and **imports your module** — which is exactly why you need the **`if __name__ == "__main__":`** guard. Without it, each child re-runs your top-level code and you get an infinite spawn of processes.
+- **`forkserver`**: a middle ground that forks from a clean server process.
+
+```python
+import multiprocessing as mp
+mp.set_start_method("spawn")    # set once, early, inside the main guard
+```
+
+**Pickling rule:** everything you send to a process (arguments, return values, the function itself) must be **picklable**. That excludes lambdas, local/nested functions, open file handles, and most locks. Define worker functions at module top level. Pickling also adds overhead — for tiny tasks, process startup + serialization can cost more than you save, so batch work into chunks (`chunksize=`).
 
 ---
 
-## Asyncio syntax and entry point
+# Part III — Asyncio
 
-- **`async def`** defines a **coroutine function**. Calling it returns a coroutine object; it does not run yet.
+One thread, one event loop, thousands of overlapping I/O operations. Cooperative: tasks run until they hit `await`, then hand control back. No locks needed for CPU sections (only one task runs at a time), but you still coordinate around `await` points.
+
+## Syntax and entry point
+
+- **`async def`** defines a **coroutine function**. Calling it returns a coroutine object; it does **not** run yet.
 - **`await`** hands control back to the loop until the awaited thing completes.
-- **`asyncio.run(coro)`** creates a loop, runs `coro` to completion, and shuts down — use this at the **top level** of a script (`if __name__ == "__main__"`). Nested calls to `asyncio.run()` are wrong; use `await` inside async code instead.
+- **`asyncio.run(coro)`** creates a loop, runs `coro` to completion, and shuts down — use it once at the **top level** (`if __name__ == "__main__"`). Never nest `asyncio.run()`; use `await` inside async code.
 
 ```python
 import asyncio
@@ -58,213 +420,251 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Use **`asyncio.get_running_loop()`** when you need the loop from inside async code. Avoid legacy `get_event_loop()` patterns unless you are on very old code paths.
+Use **`asyncio.get_running_loop()`** when you need the loop from inside async code. Avoid the legacy `get_event_loop()` patterns unless maintaining old code.
 
----
+## The event loop
 
-## Event loop
-
-The event loop is the central conductor: it decides what runs when and handles pausing and resuming.
-
-It keeps spinning and asking:
+The event loop is the central conductor: it decides what runs when and handles pausing and resuming. It keeps asking:
 
 1. Did any background I/O finish since I last checked?
 2. What is ready to execute right now?
 
-### Three phases
+**Three phases:**
 
-1. **Ready queue:** Coroutines ready to run Python code now. The loop runs them one at a time.
-2. **Execution:** The loop runs a task until it **yields** — usually at an `await`.
-3. **I/O watcher (selector):** When a task `await`s a network call, the loop moves it to a waiting set and asks the OS to watch the socket. When data arrives, the loop can put the task back on the ready queue.
-
----
+1. **Ready queue:** coroutines ready to run Python now; the loop runs them one at a time.
+2. **Execution:** the loop runs a task until it **yields** — usually at an `await`.
+3. **I/O watcher (selector):** when a task `await`s a network call, the loop parks it and asks the OS to watch the socket; when data arrives, the task goes back on the ready queue.
 
 ## Blocking vs cooperative sleep
 
-Never use `time.sleep()` inside asyncio code: it blocks the **entire** loop. Use cooperative sleep instead:
+Never use `time.sleep()` inside asyncio code — it freezes the **entire** loop. Use the cooperative version:
 
 ```python
 await asyncio.sleep(seconds)
 ```
 
-That schedules only the current task; other tasks can run. `await asyncio.sleep(0)` is a polite “yield so others can run” without waiting on a timer.
-
----
+That schedules only the current task; others keep running. `await asyncio.sleep(0)` is a polite "yield so others can run" with no timer.
 
 ## Offloading blocking work
 
-Libraries that are **not** async (blocking sockets, `requests`, heavy `subprocess`, some ORMs) will stall the whole loop if you call them inside a coroutine. Options:
+Non-async libraries (blocking sockets, `requests`, heavy `subprocess`, some ORMs) stall the whole loop if called inside a coroutine. Push them off the loop:
 
-- **`await asyncio.to_thread(func, *args)`** (3.9+): run a blocking callable in the default **thread** pool. Good for short blocking bits that release the GIL sometimes (I/O) or when threads are acceptable.
-- **`loop.run_in_executor(executor, func, *args)`**: same idea; pass `None` for the default thread pool or a **`ProcessPoolExecutor`** for CPU-heavy Python you cannot rewrite as async.
+- **`await asyncio.to_thread(func, *args)`** (3.9+): run a blocking callable in a **thread** pool. Good for blocking I/O (which releases the GIL).
+- **`loop.run_in_executor(executor, func, *args)`**: same idea; pass `None` for the default thread pool, or a **`ProcessPoolExecutor`** for CPU-heavy Python you can't rewrite as async.
 
-CPU-heavy Python belongs in **processes**, not on the asyncio thread pool, or you will still serialize on the GIL.
+CPU-heavy Python belongs in **processes**, not the asyncio thread pool, or you'll serialize on the GIL anyway.
 
----
+## Coroutines: direct `await` is sequential
 
-## Coroutines: direct `await` (sequential)
+A coroutine driven by the loop moves through: **created** (call returns an object, nothing runs) → **scheduled** → **running** → **suspended** (at `await`) → **resumed** → **done**.
 
-Once a coroutine is driven by the loop, it moves through phases:
-
-1. **Created:** You call `bake_cake()` and get a coroutine object (nothing runs yet).
-2. **Scheduled:** The loop places it on the ready queue.
-3. **Running:** The loop executes its body (e.g. prints `"Baking..."`).
-4. **Suspended:** It hits `await asyncio.sleep(1)`, yields control, and waits.
-5. **Resumed:** When ready, it goes back on the ready queue and continues.
-6. **Done:** It returns a value and is finished.
-
-If you only `await` one coroutine at a time from a single flow, you wait until it finishes before starting the next — that is **sequential**, not concurrent overlap with other coroutines you care about.
-
----
+If you only `await` one coroutine at a time in a single flow, you wait for each to finish before the next starts — that's **sequential**. To overlap, you need tasks.
 
 ## Tasks: overlapping execution
 
-`await my_coro()` means: run this coroutine to completion before the next line in **this** coroutine.
-
-To overlap work, schedule **tasks** — wrappers that the loop can interleave with others:
+`await my_coro()` runs that coroutine to completion before the next line in **this** coroutine. To overlap, wrap work in **tasks** the loop can interleave:
 
 ```python
-t = asyncio.create_task(my_coro())
-# ... do other awaits; t runs concurrently ...
-await t
+t = asyncio.create_task(my_coro())   # scheduled now, runs concurrently
+# ... do other awaits ...
+await t                               # collect its result
 ```
 
 | Action | What you write | What Python hears |
 | --- | --- | --- |
-| Call coroutine | `my_func()` | Create a coroutine object; do not run it. |
-| Await coroutine | `await my_func()` | Run it now; I pause here until it finishes. |
-| Create task | `asyncio.create_task(my_func())` | Schedule it on the ready queue; I can keep going. |
+| Call coroutine | `my_func()` | Create a coroutine object; don't run it. |
+| Await coroutine | `await my_func()` | Run it now; pause here until it finishes. |
+| Create task | `asyncio.create_task(my_func())` | Schedule it; keep going. |
 
----
+## `asyncio.gather` — run many, wait for all
 
-## `asyncio.gather`
+```python
+results = await asyncio.gather(fetch(a), fetch(b), fetch(c))
+```
 
-`asyncio.gather(*coros)` starts multiple coroutines as tasks and waits until **all** finish.
+Wraps coroutines in tasks, runs them concurrently, and returns results in input order once all finish.
 
-1. Wraps coroutines in tasks and runs them concurrently.
-2. Suspends the caller until every task completes.
+**Caveat:** if one raises and you don't pass `return_exceptions=True`, `gather` propagates that error while the others may still be running — they can become hard-to-reason "zombie" tasks unless cancelled/awaited.
 
-**Caveat:** If one task raises and you do not use `return_exceptions=True`, `gather` propagates the error — but other tasks may already be running. They can become hard-to-reason-about “zombie” work unless you cancel or await them cleanly.
+**`asyncio.wait`** is lower-level: pass explicit **Task** objects and choose to wait for **all**, **first completed**, or **first exception**. Use it for fine control; `gather` / `TaskGroup` cover most app code.
 
-**`asyncio.wait`** is lower-level: you pass explicit **Task** objects and choose whether to wait for **all**, **first completed**, or **first exception**. Use it when you need fine-grained control; `gather` / `TaskGroup` cover most app code.
+## `asyncio.TaskGroup` — structured concurrency (3.11+)
 
----
-
-## `asyncio.TaskGroup`
-
-`asyncio.TaskGroup()` (3.11+) is a structured alternative: if one child task fails, the group cancels the others, which avoids the “one failed, others keep running” footgun of raw `gather` without careful error handling.
+The modern, safer alternative: if one child fails, the group cancels the rest, so you never leak zombie tasks.
 
 ```python
 async with asyncio.TaskGroup() as tg:
     tg.create_task(work_a())
     tg.create_task(work_b())
-# all finished successfully, or an exception bubbled from the group
+# here: all finished, or an exception bubbled out of the group
 ```
 
----
+Prefer `TaskGroup` over raw `gather` for new code.
 
 ## Cancellation
 
-**`task.cancel()`** schedules cancellation. The task’s coroutine keeps running until the next **`await`**, where **`asyncio.CancelledError`** is injected (subclass of `BaseException`, not `Exception` — do not swallow it with bare `except Exception`).
+**`task.cancel()`** schedules cancellation; the coroutine keeps running until its next **`await`**, where **`asyncio.CancelledError`** is injected. It subclasses `BaseException`, not `Exception` — **don't swallow it** with bare `except Exception`.
 
-- Prefer **`try` / `finally`** for cleanup; re-raise `CancelledError` if you catch it intentionally.
-- **`asyncio.shield(aw)`** prevents *direct* cancellation of the shielded awaitable from a parent scope — use sparingly (e.g. commit you must finish); it does not stop the whole program from exiting.
-
----
+- Use **`try` / `finally`** for cleanup; re-raise `CancelledError` if you catch it deliberately.
+- **`asyncio.shield(aw)`** protects an awaitable from *direct* cancellation by a parent scope — use sparingly (e.g. a commit you must finish).
 
 ## Timeouts
 
-Bound how long you wait on awaitables:
-
 ```python
-async with asyncio.timeout(30):
+async with asyncio.timeout(30):       # 3.11+
     await slow_operation()
 ```
 
-`asyncio.timeout` is available in **3.11+**. On older versions, `asyncio.wait_for(aw, timeout=...)` is the usual pattern (it cancels the underlying task on timeout — understand that side effect).
+On older versions use `asyncio.wait_for(aw, timeout=...)` (it cancels the underlying task on timeout — know that side effect).
 
----
+## Futures and awaitables (the coffee-shop pager)
 
-## Futures and awaitables (coffee shop)
+You order a latte and get a **pager** (a Future): it starts **pending**, you go sit down (the loop does other work), and when the drink is ready the result is **set** and the pager is **done**.
 
-1. You order a latte.
-2. The barista hands you a pager instead of the drink — that pager is like a **Future**.
-3. It starts **pending** (no result yet).
-4. You sit down; the event loop can do other work.
-5. When the coffee is ready, the result is **set** on the future — it is **done**.
-6. You exchange the pager for the latte (conceptually like observing the result).
-
-- **Awaitable:** Anything you can write `await` in front of.
-- **Future:** A low-level awaitable for an eventual result.
-- **Task:** A `Future` subclass that runs a coroutine to produce that result.
-
----
+- **Awaitable:** anything you can put `await` in front of.
+- **Future:** a low-level awaitable for an eventual result.
+- **Task:** a `Future` subclass that drives a coroutine to produce that result.
 
 ## `async for` and `async with`
 
-- **`async for`** iterates an **async iterator** (e.g. streaming HTTP bodies, async database cursors).
-- **`async with`** uses an **async context manager** (`__aenter__` / `__aexit__`) so setup and teardown can await (connections, locks, HTTP clients).
+- **`async for`** iterates an **async iterator** (streaming HTTP bodies, async DB cursors).
+- **`async with`** uses an **async context manager** (`__aenter__` / `__aexit__`) so setup/teardown can `await` (connections, locks, clients).
 
 ```python
 lock = asyncio.Lock()
-async with lock:  # __aenter__ / __aexit__ may await
+async with lock:                  # __aenter__ / __aexit__ may await
     await mutate_shared_state()
 ```
 
-The same pattern shows up on HTTP clients, DB sessions, and file helpers from async libraries: acquire in `__aenter__`, release in `__aexit__`, with `await` allowed in both.
+## Asyncio coordination primitives
 
----
+Asyncio is usually single-threaded, but the loop **switches tasks at every `await`** — so between awaits, another task can mutate shared state. The async versions of the primitives serialize that.
 
-## Why locks exist on one thread
+### `asyncio.Lock`
+Serializes a critical section across `await` boundaries (one task in at a time).
 
-Asyncio is usually single-threaded, but the loop still **switches tasks at every `await`**. Between awaits, another task can mutate shared state. **`asyncio.Lock`** serializes critical sections so updates stay consistent.
+### `asyncio.Semaphore`
+Cap concurrency — the canonical "scrape many URLs, max 5 at once":
 
-### Semaphore
+```python
+sem = asyncio.Semaphore(5)
+async def fetch(url):
+    async with sem:               # at most 5 concurrent fetches
+        return await client.get(url)
+```
 
-Like a lock, but **N** tasks may enter at once. Classic use: scrape many URLs but cap concurrent requests (e.g. five at a time) so the server does not rate-limit you.
+### `asyncio.Event`
+One task `set()`s it; others `await event.wait()` — "config loaded, start workers".
 
-### Event
-
-One coroutine **sets** an event; others **wait** until it is set — useful for “config loaded, now start workers” style coordination.
-
-### Condition
-
-Combines a lock with a **condition variable**: wait until some shared state matches a predicate (producer/consumer with a buffer threshold).
+### `asyncio.Condition`
+A lock plus a condition variable: wait until shared state matches a predicate.
 
 1. Acquire the lock.
-2. Check the condition (e.g. `len(my_list) < 5`).
+2. Check the condition (e.g. buffer has room).
 3. If false, `await cond.wait()` releases the lock until a `notify`.
 4. On wake-up, re-acquire and re-check.
 
-### Queue
-
-`asyncio.Queue` is the usual “assembly line” between tasks: producers `put`, consumers `get`, with backpressure when full or empty.
+### `asyncio.Queue` — the async assembly line
 
 ```python
-await queue.put(item)  # may wait if queue is full
-await queue.get()      # may wait if queue is empty
+import asyncio
+
+async def producer(q):
+    for i in range(5):
+        await q.put(i)            # waits if full (backpressure)
+    await q.put(None)             # sentinel
+
+async def consumer(q, out):
+    while True:
+        item = await q.get()      # waits if empty
+        if item is None:
+            q.task_done(); break
+        out.append(item * 10)
+        q.task_done()
+
+async def main():
+    q = asyncio.Queue(maxsize=2)
+    out = []
+    await asyncio.gather(producer(q), consumer(q, out))
+    print(out)                    # [0, 10, 20, 30, 40]
+
+asyncio.run(main())
 ```
 
 ---
+
+# Part IV — Patterns & practice
+
+## Common patterns
+
+**Worker pool (bounded concurrency):** cap how many tasks hit a resource at once — a semaphore for asyncio, `max_workers` for executors.
+
+```python
+async def scrape_all(urls):
+    sem = asyncio.Semaphore(10)
+    async def one(u):
+        async with sem:
+            return await fetch(u)
+    return await asyncio.gather(*(one(u) for u in urls))
+```
+
+**Fan-out / fan-in:** split work across many workers (fan-out), then combine results (fan-in). `gather` / `TaskGroup` / `executor.map` all do this.
+
+**Pipeline (producer → queue → consumer):** stages connected by queues, each stage concurrent, with backpressure when a queue fills. Scales to multi-stage processing.
+
+**Rate limiting:** a semaphore caps *concurrency*; for a true *rate* (N per second) gate each call on a timer or token bucket.
+
+**Map-reduce for CPU work:** `ProcessPoolExecutor.map` over chunks, then reduce the partial results in the parent.
+
+## Combining the models
+
+These compose. The common production shape:
+
+- **asyncio** as the top-level coordinator for I/O,
+- offload **blocking calls** to a thread pool via `asyncio.to_thread`,
+- offload **CPU-heavy Python** to a process pool via `run_in_executor(ProcessPoolExecutor(), ...)`.
+
+```python
+loop = asyncio.get_running_loop()
+# CPU-bound work without freezing the event loop:
+result = await loop.run_in_executor(process_pool, heavy_compute, data)
+```
+
+## Common pitfalls cheat sheet
+
+| Pitfall | Symptom | Fix |
+| --- | --- | --- |
+| `time.sleep()` in a coroutine | Whole app freezes | `await asyncio.sleep()` |
+| Blocking call (`requests`) on the loop | Loop stalls under load | `asyncio.to_thread` / async client |
+| CPU work in threads | No speedup (GIL) | `ProcessPoolExecutor` |
+| Forgetting `if __name__ == "__main__"` | Process bomb on spawn | Add the guard |
+| Unprotected `+=` on shared state | Lost updates, flaky bugs | `Lock` or a queue |
+| Locks in different orders | Deadlock | Consistent lock ordering / timeouts |
+| Swallowing `CancelledError` | Tasks won't cancel | Re-raise it; use `try/finally` |
+| Bare `gather` with failures | Zombie tasks | `TaskGroup` or `return_exceptions=True` |
+| Sending a lambda to a process | `PicklingError` | Top-level functions only |
 
 ## Primitive cheat sheet
 
 | Primitive | Analogy | Purpose |
 | --- | --- | --- |
-| Lock | One-person bathroom | Only one task in the critical section. |
-| Semaphore | Restaurant seating | Cap how many tasks run at once (rate limit). |
-| Event | Starting pistol | Broadcast “go” to many waiters. |
-| Condition | Buzzer + rules | Wait until state matches (e.g. buffer big enough). |
+| Lock | One-person bathroom | One task/thread in the critical section. |
+| RLock | A key you can reuse | Same thread re-enters without deadlocking. |
+| Semaphore | Restaurant seating | Cap how many run at once (rate limit). |
+| Event | Starting pistol | Broadcast "go" to many waiters. |
+| Condition | Buzzer + rules | Wait until state matches a predicate. |
+| Barrier | Group photo | Everyone waits, then all proceed together. |
 | Queue | Conveyor belt | Hand off work between producers and consumers. |
 
----
-
-## Pick a tool (recap)
+## Pick a tool (final recap)
 
 | Goal | Reach for |
 | --- | --- |
-| Many concurrent I/O operations, one process | **`asyncio`** + async libraries |
-| Blocking library you cannot replace | **`asyncio.to_thread`** or **`run_in_executor`** |
-| Parallel CPU-heavy **Python** on multiple cores | **`multiprocessing`** / **process pool** |
-| Overlap blocking I/O with sync code, no rewrite | **Threads** + careful shared state |
+| Many concurrent I/O ops, one process, async libs | **`asyncio`** + async libraries |
+| Blocking library you can't replace | **`asyncio.to_thread`** / **threads** / **`ThreadPoolExecutor`** |
+| Parallel CPU-heavy **Python** on many cores | **`multiprocessing`** / **`ProcessPoolExecutor`** |
 | Structured fan-out/fan-in with sane errors | **`TaskGroup`** (3.11+) |
+| Pass data between workers safely | **`queue.Queue`** (threads) / **`asyncio.Queue`** (async) / **`mp.Queue`** (processes) |
+| Cap concurrency against a service | **Semaphore** (`threading` or `asyncio`) |
+
+> **Closing thought:** concurrency in Python is one question with three answers. Decide *waiting vs computing* first; the GIL then tells you threads can overlap waiting but not computing, and processes can do both at the price of shared memory. Everything else — locks, queues, the event loop — is just how you coordinate the answer you picked.
