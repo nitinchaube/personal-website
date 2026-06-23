@@ -235,7 +235,7 @@ The fixes are non-negotiable for production:
 
 When generating token number 500, the model needs to attend to all 499 prior tokens. Recomputing their Key and Value projections every step would be $O(N^2)$ and ruinous. So you compute each token's K and V **once** and cache them. That cache *is* the per-request state, and managing it is most of what a serving engine does.
 
-The size per token is:
+=The size per token is:
 
 $$  
 \text{bytes/token} = 2 \times L \times H_{kv} \times d_{head} \times \text{bytes per element}  
@@ -287,17 +287,17 @@ Two more levers when memory is tight:
 
 People conflate these two because both have "attention" in the name, but they fix different things. PagedAttention is about *where the KV cache lives in memory*. **FlashAttention** is about *how the attention math is computed*.
 
-The naive attention computation builds the full $N \times N$ score matrix $S = QK^\top$ in HBM, softmaxes it, then multiplies by $V$. For long sequences that matrix is gigantic and — here's the key — writing it to HBM and reading it back is the actual bottleneck. The matmul is fast; shuffling the intermediate matrix to and from memory is slow.
+The naive attention computation builds the full $N \times N$ score matrix $S = QK^\top$ in HBM, softmaxes it, then multiplies by $V$. For long sequences that matrix is gigantic and here's the key, writing it to HBM and reading it back is the actual bottleneck. The matmul is fast; shuffling the intermediate matrix to and from memory is slow.
 
-FlashAttention is **IO-aware**. It tiles Q, K, and V into blocks small enough to fit in the GPU's on-chip SRAM, and computes the softmax **incrementally** ("online softmax") so it never materializes the full $N \times N$ matrix in HBM at all. Memory drops from $O(N^2)$ to $O(N)$ and the kernel runs much faster because it stopped thrashing memory. FlashAttention-2 improved how the work is split across the GPU's units; FlashAttention-3 exploits Hopper's async copies and FP8. You will basically always be running some FlashAttention variant under the hood — it's the default attention kernel now, and it composes with PagedAttention (the paged version reads the scattered KV blocks into the flash kernel).
+FlashAttention is **IO-aware**. It tiles Q, K, and V into blocks small enough to fit in the GPU's on-chip SRAM, and computes the softmax **incrementally** ("online softmax") so it never materializes the full $N \times N$ matrix in HBM at all. Memory drops from $O(N^2)$ to $O(N)$ and the kernel runs much faster because it stopped thrashing memory. FlashAttention-2 improved how the work is split across the GPU's units; FlashAttention-3 exploits Hopper's async copies and FP8. You will basically always be running some FlashAttention variant under the hood  -  it's the default attention kernel now, and it composes with PagedAttention (the paged version reads the scattered KV blocks into the flash kernel).
 
 ---
 
-## Making the model cheaper: quantization and distillation
+# Making the model cheaper:
 
-Decode is memory-bound, so the most direct way to speed it up is to make the weights **smaller** — fewer bytes to stream from HBM per token. That's quantization.
+Decode is memory-bound, so the most direct way to speed it up is to make the weights **smaller**, fewer bytes to stream from HBM per token. That's quantization.
 
-### Quantization
+## 1)Quantization
 
 Map high-precision weights (FP16/BF16) onto a coarser grid (INT8, INT4, FP8, FP4). Uniform quantization is:
 
@@ -305,7 +305,7 @@ $$
 W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z, q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)  
 $$
 
-where $S$ is a scale and $Z$ a zero-point. At INT4 you've cut weight memory ~4× versus FP16, which roughly speeds up the memory-bound decode by a similar factor — the headline reason quantization is everywhere.
+where $S$ is a scale and $Z$ a zero-point. At INT4 you've cut weight memory ~4× versus FP16, which roughly speeds up the memory-bound decode by a similar factor  -  the headline reason quantization is everywhere.
 
 Two ways to get there:
 
@@ -315,17 +315,17 @@ Two ways to get there:
 The two PTQ methods worth knowing:
 
 - **GPTQ** frames quantization as layer-wise error minimization, using a second-order (inverse-Hessian) approximation to decide how to round each weight so the layer's *output* changes as little as possible. It's careful and accurate; the Cholesky decomposition and lazy batch updates are just numerical tricks to make the Hessian math stable and fast at billion-parameter scale.
-- **AWQ (Activation-aware Weight Quantization)** starts from a sharp observation: a tiny fraction of weights (under ~1%) are "salient" and matter far more than the rest — and you can find them by looking at *activation* magnitudes, not weight magnitudes. AWQ scales those salient channels up before quantizing (and scales the activations down to compensate), which protects the important weights from rounding error without the cost of storing anything in mixed precision. In practice AWQ is fast to apply and holds quality well at 4-bit, which is why it shows up so often in served models.
+- **AWQ (Activation-aware Weight Quantization)** starts from a sharp observation: a tiny fraction of weights (under ~1%) are "salient" and matter far more than the rest  -  and you can find them by looking at *activation* magnitudes, not weight magnitudes. AWQ scales those salient channels up before quantizing (and scales the activations down to compensate), which protects the important weights from rounding error without the cost of storing anything in mixed precision. In practice AWQ is fast to apply and holds quality well at 4-bit, which is why it shows up so often in served models.
 
-There's also **FP8** as a first-class inference format on Hopper — it keeps a floating-point exponent so it handles outliers more gracefully than INT8, and the hardware has native FP8 tensor cores, so you get both smaller weights and faster compute.
+There's also **FP8** as a first-class inference format on Hopper  -  it keeps a floating-point exponent so it handles outliers more gracefully than INT8, and the hardware has native FP8 tensor cores, so you get both smaller weights and faster compute.
 
 One honest caveat: quantization quality is workload-dependent. A model that benchmarks fine at INT4 can degrade noticeably on long-context reasoning or code. Always re-evaluate on *your* task, not just perplexity.
 
-### Distillation
+## 2) Distillation
 
 Quantization shrinks the representation; distillation shrinks the **model**. You train a small "student" to imitate a big "teacher."
 
-- **Response-based** distillation has the student match the teacher's softened output distribution. You raise the softmax temperature $T>1$ to spread probability mass, which exposes the teacher's "dark knowledge" — the relative likelihoods among *wrong* answers, which carry a lot of signal. The loss is the KL divergence between the two distributions:
+- **Response-based** distillation has the student match the teacher's softened output distribution. You raise the softmax temperature $T>1$ to spread probability mass, which exposes the teacher's "dark knowledge" i.e. the relative likelihoods among *wrong* answers, which carry a lot of signal. The loss is the KL divergence between the two distributions:
 
 $$  
 q_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}  
@@ -341,24 +341,24 @@ Distillation is more work than quantization and needs data, but it can produce a
 
 ### Speculative decoding
 
-This one's clever. Decode is memory-bound, which means when the big model does a forward pass to make *one* token, the GPU's compute units are mostly idle — you've paid to load all the weights anyway. So why not verify *several* candidate tokens in that same pass for nearly free?
+This one's clever. Decode is memory-bound, which means when the big model does a forward pass to make *one* token, the GPU's compute units are mostly idle, you've paid to load all the weights anyway. So why not verify *several* candidate tokens in that same pass for nearly free?
 
 - A small, cheap **draft** model autoregressively guesses the next $K$ tokens.
 - The big **target** model checks all $K$ in a **single** forward pass (it can, because it now has all $K$ candidate positions to score at once).
-- A **rejection-sampling** rule decides how many to keep, and — this is the important part — it's mathematically guaranteed to produce exactly the same distribution the target model would have produced alone. No quality loss. You're not approximating; you're just doing the same sampling more efficiently.
+- A **rejection-sampling** rule decides how many to keep, and  -  this is the important part  -  it's mathematically guaranteed to produce exactly the same distribution the target model would have produced alone. No quality loss. You're not approximating; you're just doing the same sampling more efficiently.
 
 The acceptance rule per drafted token $x$: if the target assigns it at least as much probability as the draft did ($P_{target}(x) \ge P_{draft}(x)$), accept it. Otherwise accept it with probability $P_{target}(x)/P_{draft}(x)$.
 
 Two outcomes people routinely mix up:
 
 - **On the first rejection**, you stop, throw away the rest of the draft, and resample *that one position* from the adjusted residual distribution $\propto \max(0, P_{target}(x) - P_{draft}(x))$. That keeps the math exact.
-- **If all $K$ are accepted**, you get a free **bonus token** from the target's final position — the extra token you scored "for free" in the same pass.
+- **If all $K$ are accepted**, you get a free **bonus token** from the target's final position  -  the extra token you scored "for free" in the same pass.
 
-When the draft is good (high acceptance rate $\alpha$), this routinely gives **2–3× faster decode** with identical output. When $\alpha$ is low, you waste compute drafting and verifying tokens you throw away, and it can be *slower* than not speculating — which is why acceptance rate is a metric you watch.
+When the draft is good (high acceptance rate $\alpha$), this routinely gives **2–3× faster decode** with identical output. When $\alpha$ is low, you waste compute drafting and verifying tokens you throw away, and it can be *slower* than not speculating  -  which is why acceptance rate is a metric you watch.
 
 Beyond the classic draft-model setup:
 
-- **Medusa** bolts extra prediction heads onto the target model itself, so it drafts its own future tokens — no separate model to host.
+- **Medusa** bolts extra prediction heads onto the target model itself, so it drafts its own future tokens  -  no separate model to host.
 - **EAGLE** drafts at the feature level for higher acceptance.
 - **Prompt-lookup / n-gram** decoding skips the model entirely for the draft: it just copies likely continuations from the prompt. Shockingly effective for summarization and code editing where the output echoes the input.
 
@@ -366,7 +366,7 @@ Beyond the classic draft-model setup:
 
 The forward pass gives you logits; sampling turns them into a token. This is cheap but it shapes everything users feel:
 
-- **Greedy / temperature** — `temperature` flattens (>1) or sharpens (<1) the distribution; 0 is deterministic argmax.
+- **Greedy / temperature**  -  `temperature` flattens (>1) or sharpens (<1) the distribution; 0 is deterministic argmax.
 - **Top-k** keeps the k most likely tokens, **top-p (nucleus)** keeps the smallest set whose probability mass exceeds p, **min-p** scales the threshold by the top token's probability. These trade diversity against coherence.
 - **Repetition / presence penalties** fight loops.
 
@@ -374,17 +374,17 @@ It's a small part of the runtime but a large part of perceived quality, and gett
 
 ### Structured / guided decoding
 
-When you need the output to be valid JSON or match a schema, don't parse-and-retry — constrain the sampling. At each step you build a mask that zeroes out any token that would violate the grammar/state machine, so the model can *only* emit valid continuations. Libraries like Outlines and XGrammar compile the schema into an FSM ahead of time, so the per-token overhead is near zero. This turns "the model usually returns JSON" into "the model cannot return anything but valid JSON," which is the difference between a demo and a reliable API.
+When you need the output to be valid JSON or match a schema, don't parse-and-retry  -  constrain the sampling. At each step you build a mask that zeroes out any token that would violate the grammar/state machine, so the model can *only* emit valid continuations. Libraries like Outlines and XGrammar compile the schema into an FSM ahead of time, so the per-token overhead is near zero. This turns "the model usually returns JSON" into "the model cannot return anything but valid JSON," which is the difference between a demo and a reliable API.
 
 ---
 
 ## Compilation and kernels: the unglamorous speedups
 
-A surprising amount of decode time is *overhead*, not math — launching thousands of tiny CUDA kernels, Python dispatch, framework bookkeeping. Each decode step is small, so per-step overhead dominates.
+A surprising amount of decode time is *overhead*, not math  -  launching thousands of tiny CUDA kernels, Python dispatch, framework bookkeeping. Each decode step is small, so per-step overhead dominates.
 
-- **CUDA graphs** capture the entire sequence of kernel launches for a decode step *once*, then replay the whole thing as a single unit. When each step is tiny, killing the launch overhead is one of the largest decode speedups available — vLLM uses this heavily.
+- **CUDA graphs** capture the entire sequence of kernel launches for a decode step *once*, then replay the whole thing as a single unit. When each step is tiny, killing the launch overhead is one of the largest decode speedups available  -  vLLM uses this heavily.
 - **Kernel fusion** merges adjacent operations (e.g. a matmul + bias + activation) into one kernel so intermediate results never round-trip through HBM.
-- **Graph compilers** — TensorRT-LLM, `torch.compile` — do this fusion and layout selection automatically and emit hardware-tuned kernels. TensorRT-LLM tends to be the fastest on NVIDIA but the least flexible (you compile an engine per model/shape/precision); `torch.compile` is more general and lives inside PyTorch.
+- **Graph compilers**  -  TensorRT-LLM, `torch.compile`  -  do this fusion and layout selection automatically and emit hardware-tuned kernels. TensorRT-LLM tends to be the fastest on NVIDIA but the least flexible (you compile an engine per model/shape/precision); `torch.compile` is more general and lives inside PyTorch.
 
 None of this changes the model's output. It just stops wasting cycles, and it's often a 20–50% win for nearly free.
 
@@ -392,28 +392,28 @@ None of this changes the model's output. It just stops wasting cycles, and it's 
 
 ## Going multi-GPU: when one accelerator isn't enough
 
-You shard across GPUs for two reasons: the model doesn't fit, or one GPU can't keep up with demand. A 70B model in FP16 needs ~140 GB just for weights — already too big for an 80 GB H100 before you've stored a single KV block. The strategies are different tools for different problems.
+You shard across GPUs for two reasons: the model doesn't fit, or one GPU can't keep up with demand. A 70B model in FP16 needs ~140 GB just for weights  -  already too big for an 80 GB H100 before you've stored a single KV block. The strategies are different tools for different problems.
 
 ### Data Parallelism (DP)
 
-Replicate the whole model on each GPU; each is an independent, self-contained server. A stateless L7 load balancer sprays requests across replicas (least-outstanding-requests beats round-robin here, because request costs vary so much). Inference DP is simple — no gradient sync like training — and scales **throughput** linearly. But it does nothing for single-request latency, and it can't help if the model doesn't fit on one GPU in the first place.
+Replicate the whole model on each GPU; each is an independent, self-contained server. A stateless L7 load balancer sprays requests across replicas (least-outstanding-requests beats round-robin here, because request costs vary so much). Inference DP is simple  -  no gradient sync like training  -  and scales **throughput** linearly. But it does nothing for single-request latency, and it can't help if the model doesn't fit on one GPU in the first place.
 
 ### Tensor Parallelism (TP)
 
 Split the *individual weight matrices* across GPUs (intra-layer sharding), the Megatron-LM way. The trick is to shard so that communication is minimized:
 
-- Projection matrices ($W_Q, W_K, W_V$, and the MLP's first layer) are split **column-wise** — each GPU computes a slice of the output independently, no communication needed mid-way.
-- Output matrices (attention's $W_O$, the MLP's second layer) are split **row-wise** — each GPU produces a *partial* result, and the partials must be summed with an **all-reduce** to reconstruct the true output.
+- Projection matrices ($W_Q, W_K, W_V$, and the MLP's first layer) are split **column-wise**  -  each GPU computes a slice of the output independently, no communication needed mid-way.
+- Output matrices (attention's $W_O$, the MLP's second layer) are split **row-wise**  -  each GPU produces a *partial* result, and the partials must be summed with an **all-reduce** to reconstruct the true output.
 
-So every transformer block costs **two all-reduces** in the forward pass (one after attention, one after the MLP). All-reduce is a blocking collective — everyone waits for everyone — so TP is brutally sensitive to interconnect speed. It's viable on NVLink (900 GB/s on H100) and a disaster over PCIe (~64 GB/s per direction), where communication swamps compute. **Rule of thumb: TP stays inside a node, across NVLink.** What you get for it: the model *and* the KV cache split $1/N$ per GPU (fits bigger models) *and* lower single-request latency (more compute on one token). It's the go-to for latency-sensitive serving of a model too big for one card.
+So every transformer block costs **two all-reduces** in the forward pass (one after attention, one after the MLP). All-reduce is a blocking collective  -  everyone waits for everyone  -  so TP is brutally sensitive to interconnect speed. It's viable on NVLink (900 GB/s on H100) and a disaster over PCIe (~64 GB/s per direction), where communication swamps compute. **Rule of thumb: TP stays inside a node, across NVLink.** What you get for it: the model *and* the KV cache split $1/N$ per GPU (fits bigger models) *and* lower single-request latency (more compute on one token). It's the go-to for latency-sensitive serving of a model too big for one card.
 
 ### Pipeline Parallelism (PP)
 
-Split by *layers* (inter-layer sharding): GPU 0 holds layers 1–20, GPU 1 holds 21–40, and so on. Activations pass from one stage to the next — point-to-point, far less communication than TP, so PP works **across nodes** (Ethernet/InfiniBand). The catch is the **pipeline bubble**: while GPU 0 works on the first layers, GPUs 1–3 sit idle waiting for it, and vice versa. You hide the bubble with **micro-batching** — slice the batch into pieces that flow through the stages staggered, keeping every stage busy on a different piece. PP is mainly about fitting big models and adding throughput, not cutting latency.
+Split by *layers* (inter-layer sharding): GPU 0 holds layers 1–20, GPU 1 holds 21–40, and so on. Activations pass from one stage to the next  -  point-to-point, far less communication than TP, so PP works **across nodes** (Ethernet/InfiniBand). The catch is the **pipeline bubble**: while GPU 0 works on the first layers, GPUs 1–3 sit idle waiting for it, and vice versa. You hide the bubble with **micro-batching**  -  slice the batch into pieces that flow through the stages staggered, keeping every stage busy on a different piece. PP is mainly about fitting big models and adding throughput, not cutting latency.
 
-### Expert Parallelism (EP) — for MoE models
+### Expert Parallelism (EP)  -  for MoE models
 
-Mixture-of-Experts models (Mixtral, DeepSeek-V3) only activate a couple of "expert" FFNs per token, so they have huge parameter counts but modest per-token compute. You shard by placing different experts on different GPUs. A **router** picks experts per token, and an **all-to-all** collective shuffles each token to wherever its experts live and the results back. The challenge is *load balance* — if everyone's tokens want the same expert, that GPU melts while others idle. EP is its own discipline and increasingly central as MoE eats the frontier.
+Mixture-of-Experts models (Mixtral, DeepSeek-V3) only activate a couple of "expert" FFNs per token, so they have huge parameter counts but modest per-token compute. You shard by placing different experts on different GPUs. A **router** picks experts per token, and an **all-to-all** collective shuffles each token to wherever its experts live and the results back. The challenge is *load balance*  -  if everyone's tokens want the same expert, that GPU melts while others idle. EP is its own discipline and increasingly central as MoE eats the frontier.
 
 |                     | Data (DP)      | Tensor (TP)                     | Pipeline (PP)              | Expert (EP)        |
 | ------------------- | -------------- | ------------------------------- | -------------------------- | ------------------ |
@@ -427,9 +427,9 @@ In practice you **combine** them: TP within a node, PP across nodes, DP across t
 
 ### Prefill–decode disaggregation
 
-Now the idea that ties the whole document together. Prefill is compute-bound; decode is memory-bound. When they run on the *same* GPU, they fight — a long prefill stalls decode (the stutter we fixed with chunked prefill), and the two phases want different batch sizes, different parallelism, even different hardware.
+Now the idea that ties the whole document together. Prefill is compute-bound; decode is memory-bound. When they run on the *same* GPU, they fight  -  a long prefill stalls decode (the stutter we fixed with chunked prefill), and the two phases want different batch sizes, different parallelism, even different hardware.
 
-**Disaggregation** (DistServe, Splitwise, Mooncake) runs them on **separate GPU pools**. A prefill pool — sized and tuned for compute and TTFT — does the prompt processing, then **ships the KV cache** over a fast interconnect to a decode pool tuned for memory bandwidth and ITL. Each pool scales independently to its own SLO, and neither interferes with the other. The cost is the KV-cache transfer between pools, which is why this needs serious networking (and is driving work on fast KV transfer like NIXL). It's the current frontier for large-scale, SLO-strict deployments — and notice it's just the prefill/decode mental model from the top of this note, taken to its logical hardware conclusion.
+**Disaggregation** (DistServe, Splitwise, Mooncake) runs them on **separate GPU pools**. A prefill pool  -  sized and tuned for compute and TTFT  -  does the prompt processing, then **ships the KV cache** over a fast interconnect to a decode pool tuned for memory bandwidth and ITL. Each pool scales independently to its own SLO, and neither interferes with the other. The cost is the KV-cache transfer between pools, which is why this needs serious networking (and is driving work on fast KV transfer like NIXL). It's the current frontier for large-scale, SLO-strict deployments  -  and notice it's just the prefill/decode mental model from the top of this note, taken to its logical hardware conclusion.
 
 ---
 
@@ -478,7 +478,7 @@ Putting the pieces together, here's the path a single request takes through a se
         └────────────┘           └────────────┘           └────────────┘
 ```
 
-The walk-through: the gateway terminates TLS, authenticates, and rate-limits. The router hashes the prompt's prefix and sends the request to a replica whose prefix cache is already warm (a cache hit there skips prefill entirely), and sheds load if the queue is too deep to drain in time. The runtime drops the request into the waiting queue; the continuous batcher admits it within the `max_queue_delay` window and folds it into the live batch — its prefill chunked so it doesn't stall anyone's decode. The PagedAttention manager maps the sequence to physical blocks, bumping refcounts (copy-on-write) on any prefix blocks it can share. The forward pass runs across the TP GPUs over NVLink, with an all-reduce stitching the shards back together each layer, while the speculative engine uses the otherwise-idle compute to verify drafted tokens. As tokens generate they **stream** back to the client (SSE) — you don't wait for the whole completion. On `<EOS>`, the batcher evicts the sequence, frees its KV blocks back to the pool, and closes the stream.
+The walk-through: the gateway terminates TLS, authenticates, and rate-limits. The router hashes the prompt's prefix and sends the request to a replica whose prefix cache is already warm (a cache hit there skips prefill entirely), and sheds load if the queue is too deep to drain in time. The runtime drops the request into the waiting queue; the continuous batcher admits it within the `max_queue_delay` window and folds it into the live batch  -  its prefill chunked so it doesn't stall anyone's decode. The PagedAttention manager maps the sequence to physical blocks, bumping refcounts (copy-on-write) on any prefix blocks it can share. The forward pass runs across the TP GPUs over NVLink, with an all-reduce stitching the shards back together each layer, while the speculative engine uses the otherwise-idle compute to verify drafted tokens. As tokens generate they **stream** back to the client (SSE)  -  you don't wait for the whole completion. On `<EOS>`, the batcher evicts the sequence, frees its KV blocks back to the pool, and closes the stream.
 
 ---
 
@@ -488,7 +488,7 @@ Standard web-service operations assumptions break on GPU inference. You have to 
 
 ### Autoscaling can't use CPU or RAM
 
-A serving process like vLLM grabs ~90% of GPU VRAM **at startup** to pre-allocate its KV block pool, so VRAM usage is flat regardless of load — useless as a scaling signal. And the CPU mostly just launches kernels, so it looks idle while the GPU is pegged. Scale on CPU/RAM and you'll never scale at all.
+A serving process like vLLM grabs ~90% of GPU VRAM **at startup** to pre-allocate its KV block pool, so VRAM usage is flat regardless of load  -  useless as a scaling signal. And the CPU mostly just launches kernels, so it looks idle while the GPU is pegged. Scale on CPU/RAM and you'll never scale at all.
 
 Autoscale on **queue depth and KV-cache utilization** instead. With KEDA + Prometheus you read runtime metrics (`vllm:num_requests_running`, queue depth) and size the fleet by capacity per replica:
 
@@ -496,34 +496,34 @@ $$
 \text{replicas} = \left\lceil \frac{\text{total pending + active requests}}{\text{requests one replica can serve within SLO}} \right\rceil  
 $$
 
-The best **leading** indicator is KV-cache utilization: once it crosses ~75–80%, the engine is about to stop admitting new sequences and your tail is about to spike — so scale out *before* it hits the wall, not after. Scaling on lagging latency metrics means you only react once users are already hurting.
+The best **leading** indicator is KV-cache utilization: once it crosses ~75–80%, the engine is about to stop admitting new sequences and your tail is about to spike  -  so scale out *before* it hits the wall, not after. Scaling on lagging latency metrics means you only react once users are already hurting.
 
 ### Cold starts are brutal
 
-Scaling out means loading 140 GB of weights from object storage, through the CPU, across PCIe, into HBM. Done naively (`torch.load` unpickling into Python objects) it allocates huge intermediate buffers, risks CPU OOM, and takes minutes — long enough that your autoscaler is always behind the curve.
+Scaling out means loading 140 GB of weights from object storage, through the CPU, across PCIe, into HBM. Done naively (`torch.load` unpickling into Python objects) it allocates huge intermediate buffers, risks CPU OOM, and takes minutes  -  long enough that your autoscaler is always behind the curve.
 
 The fix is `.safetensors` + **memory-mapping**. Stage weights on fast local storage (tmpfs/NVMe), `mmap()` the file into virtual memory, and use `cudaHostRegister` to pin it so the GPU can **DMA** the weights directly across PCIe with no intermediate CPU copy. Zero-copy loading turns minutes into seconds, which is what makes responsive autoscaling possible at all. (Warm pools and snapshotting help too.)
 
 ### Rollouts when "correct" is undefined
 
-You can't unit-test an LLM the way you test a function — generation is non-deterministic and "right" is fuzzy. So you de-risk deploys with traffic, not assertions:
+You can't unit-test an LLM the way you test a function  -  generation is non-deterministic and "right" is fuzzy. So you de-risk deploys with traffic, not assertions:
 
 - **Shadow deployment:** mirror a slice of real traffic to the new version *asynchronously*. Users only ever see the old version's response; an offline pipeline compares TTFT, ITL, and quality/perplexity of the shadow. Catches regressions with zero user risk.
-- **Canary release:** route a small % of *live* traffic to the new version and watch the metrics before ramping. Critically, keep **session stickiness** — a user mid-conversation must not bounce between versions, or their prefix cache misses and quality wobbles visibly.
+- **Canary release:** route a small % of *live* traffic to the new version and watch the metrics before ramping. Critically, keep **session stickiness**  -  a user mid-conversation must not bounce between versions, or their prefix cache misses and quality wobbles visibly.
 
 ### Observability: the metrics to actually watch
 
-- **TTFT & ITL histograms at p50/p95/p99** — the SLO truth. Everything else is diagnosis.
-- **KV-cache utilization** (`vllm:gpu_cache_usage_perc`) — tells you when you're memory-starved vs compute-starved, and it's your scale-out trigger.
-- **GPU SM utilization** (DCGM exporter) — read it *together* with queue depth. High SM + low queue = healthy compute-bound work. Low SM + high queue = a bottleneck *outside* the GPU (tokenization, the Python event loop, scheduling) — you're starving the GPU, and adding GPUs won't help.
-- **Speculative acceptance rate $\alpha$** — if the draft model drifts and $\alpha$ drops below ~0.5, speculation is *costing* you compute. Alert on it and be ready to turn speculation off.
-- **Batch size and preemption/swap counts** — rising preemptions mean you're memory-bound and should scale or shrink context limits.
+- **TTFT & ITL histograms at p50/p95/p99**  -  the SLO truth. Everything else is diagnosis.
+- **KV-cache utilization** (`vllm:gpu_cache_usage_perc`)  -  tells you when you're memory-starved vs compute-starved, and it's your scale-out trigger.
+- **GPU SM utilization** (DCGM exporter)  -  read it *together* with queue depth. High SM + low queue = healthy compute-bound work. Low SM + high queue = a bottleneck *outside* the GPU (tokenization, the Python event loop, scheduling)  -  you're starving the GPU, and adding GPUs won't help.
+- **Speculative acceptance rate $\alpha$**  -  if the draft model drifts and $\alpha$ drops below ~0.5, speculation is *costing* you compute. Alert on it and be ready to turn speculation off.
+- **Batch size and preemption/swap counts**  -  rising preemptions mean you're memory-bound and should scale or shrink context limits.
 
 ---
 
 ## A note on hardware beyond NVIDIA
 
-NVIDIA dominates, but it's worth knowing the alternatives exist because they change the cost math: **AMD MI300X** (massive 192 GB HBM, ROCm + vLLM support), **Google TPUs** (great for both training and batch inference if you live in JAX/XLA), **AWS Inferentia/Trainium** (cheaper per token in AWS), and latency specialists like **Groq** and **Cerebras** that target extreme tokens/sec for decode. The principles in this document are vendor-neutral — prefill vs decode, memory-bound decode, batching, KV management — but the specific knobs and the best-value chip shift with the workload.
+NVIDIA dominates, but it's worth knowing the alternatives exist because they change the cost math: **AMD MI300X** (massive 192 GB HBM, ROCm + vLLM support), **Google TPUs** (great for both training and batch inference if you live in JAX/XLA), **AWS Inferentia/Trainium** (cheaper per token in AWS), and latency specialists like **Groq** and **Cerebras** that target extreme tokens/sec for decode. The principles in this document are vendor-neutral  -  prefill vs decode, memory-bound decode, batching, KV management but the specific knobs and the best-value chip shift with the workload.
 
 ---
 
@@ -548,10 +548,10 @@ From most common to most subtle:
 
 If you remember one thing: **prefill is compute-bound, decode is memory-bound, and almost every technique here is a way to stop wasting memory bandwidth during decode.**
 
-- Batching raises decode's arithmetic intensity by sharing loaded weights across sequences — that's continuous batching.
+- Batching raises decode's arithmetic intensity by sharing loaded weights across sequences  -  that's continuous batching.
 - The KV cache is the per-request state, and managing it (GQA to shrink it, PagedAttention to pack it, prefix caching to share it, quantization to compress it) is most of the engine.
 - Quantization shrinks the bytes you stream per token; FlashAttention and CUDA graphs stop wasting the cycles around the math; speculative decoding uses idle compute to verify multiple tokens per memory load.
 - Sharding (DP/TP/PP/EP) and disaggregation are the same ideas projected onto many GPUs, each matched to the interconnect that can afford its communication.
-- And the operations — autoscale on queues and KV, scale before the wall, shed load, deploy with shadow traffic — exist because GPUs don't behave like the stateless services your old playbook assumes.
+- And the operations  -  autoscale on queues and KV, scale before the wall, shed load, deploy with shadow traffic  -  exist because GPUs don't behave like the stateless services your old playbook assumes.
 
 The recurring engineering question is the same one as everywhere else: which part of the hardware are you wasting right now, and what's the cheapest way to stop?
