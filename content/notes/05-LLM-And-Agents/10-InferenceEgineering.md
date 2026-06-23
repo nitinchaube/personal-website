@@ -5,17 +5,15 @@ summary: "Notes on what it actually takes to serve LLMs in production: the prefi
 tags: [Inference, LLM, Serving, vLLM, KV-Cache, Quantization, GPU, MLOps, Performance]
 ---
 
-Training gets the glory. Inference pays the bills.
-
 A model you trained once runs in production millions of times, and every one of those runs costs GPU-seconds and shows up on someone's latency dashboard. The gap between a research checkpoint and a service that holds a p99 latency SLA at a few thousand requests per second is enormous, and almost none of it is about the model. It's about how you feed the GPU.
 
-The thing that took me a while to internalize: serving an LLM is not like serving a normal web service. A normal service is mostly stateless request/response, CPU- or network-bound, and you scale it by adding boxes more or less linearly. An LLM generates one token at a time, autoregressively, and each token requires reading the *entire* model out of memory. That single fact — autoregression on top of multi-gigabyte weights — bends every rule you know about scaling services. The bottleneck isn't compute. Most of the time it's memory bandwidth, and the engineering is a long fight to stop wasting it.
+The thing that took me a while to internalize: serving an LLM is not like serving a normal web service. A normal service is mostly stateless request/response, CPU- or network-bound and you scale it by adding boxes more or less linearly. An LLM generates one token at a time, autoregressively and each token requires reading the *entire* model out of memory. That single fact is autoregression on top of multi-gigabyte weights bends every rule you know about scaling services. The bottleneck isn't compute. Most of the time it's memory bandwidth and the engineering is a long fight to stop wasting it.
 
-These are my notes on how production inference actually works: the two phases, the caches, the batching tricks, the compression, the sharding, and the operational scaffolding. The math where it explains a failure mode, the diagrams where they help.
+These are my notes on how production inference actually works: the two phases, the caches, the batching tricks, the compression, the sharding and the operational scaffolding.
 
 ---
 
-## The one mental model: prefill and decode are two different machines
+# Prefill and Decode are two different machines
 
 Everything downstream makes sense once you see that a single generation request runs in two phases with completely opposite hardware behavior.
 
@@ -31,64 +29,64 @@ PROMPT: "Write a haiku about GPUs"
             TTFT                                      ITL between each token
 ```
 
-**Prefill** takes the whole prompt and runs it through the model in one shot. Because you're processing many tokens simultaneously, the math is a big matrix–matrix multiply: lots of arithmetic per byte of weight you loaded. The GPU's compute units stay busy. Prefill is **compute-bound**, and it's what determines your **Time To First Token (TTFT)**.
+- **Prefill** takes the whole prompt and runs it through the model in one shot. Because you're processing many tokens simultaneously, the math is a big matrix–matrix multiply: lots of arithmetic per byte of weight you loaded. The GPU's compute units stay busy. Prefill is **compute-bound** and it's what determines your **Time To First Token (TTFT)**.
+- **Decode** generates the rest, one token at a time, each one conditioned on everything before it. To produce a *single* token you still have to stream every weight in the model from HBM (the GPU's main memory) down to the compute units but you only do a thin matrix–vector multiply with it. You pay the full cost of reading the weights and do almost no math with them. Decode is **memory-bandwidth-bound**, and it determines your **Inter-Token Latency (ITL)**, sometimes called Time Per Output Token (TPOT).
 
-**Decode** generates the rest, one token at a time, each one conditioned on everything before it. To produce a *single* token you still have to stream every weight in the model from HBM (the GPU's main memory) down to the compute units — but you only do a thin matrix–vector multiply with it. You pay the full cost of reading the weights and do almost no math with them. Decode is **memory-bandwidth-bound**, and it determines your **Inter-Token Latency (ITL)**, sometimes called Time Per Output Token (TPOT).
+## Arithmetic intensity and the roofline
 
-This is the asymmetry that defines the whole field. Let me make it concrete with the roofline idea.
+Every GPU has two ceilings:
 
-### Arithmetic intensity and the roofline
+1. How fast it can do math (FLOP/s) and
+2. how fast it can move bytes from HBM (bytes/s).
 
-Every GPU has two ceilings: how fast it can do math (FLOP/s) and how fast it can move bytes from HBM (bytes/s). Which ceiling you hit depends on **arithmetic intensity** — FLOPs performed per byte loaded.
+Which ceiling you hit depends on **arithmetic intensity** i.e. FLOPs performed per byte loaded.
 
+$$  
+\text{Arithmetic Intensity} = \frac{\text{FLOPs in the operation}}{\text{bytes moved from HBM}}  
 $$
-\text{Arithmetic Intensity} = \frac{\text{FLOPs in the operation}}{\text{bytes moved from HBM}}
-$$
 
-If intensity is low, you're waiting on memory and the compute units idle. If it's high, you're actually using the compute. The crossover — the "ridge point" of the roofline — is just `(peak FLOP/s) / (peak bandwidth)`. On an H100 that ridge sits somewhere around a few hundred FLOPs/byte depending on precision.
+If intensity is low, you're waiting on memory and the compute units idle. If it's high, you're actually using the compute. The "ridge point" of the roofline is just `(peak FLOP/s) / (peak bandwidth)`. On an H100 that ridge sits somewhere around a few hundred FLOPs/byte depending on precision.
 
 - **Prefill** with a long prompt has high intensity (a matrix–matrix multiply reuses each loaded weight across many tokens). It lives on the compute-bound side of the ridge.
-- **Decode at batch size 1** has an intensity of roughly **1–2 FLOPs/byte**. It's nowhere near the ridge — it's pinned to the memory wall. You could double the GPU's FLOPs and decode wouldn't get faster.
+- **Decode at batch size 1** has an intensity of roughly **1–2 FLOPs/byte**. It's nowhere near the ridge and it's pinned to the memory wall. You could double the GPU's FLOPs and decode wouldn't get faster.
 
-The most important corollary, and the reason batching exists: the way you raise decode's arithmetic intensity is to process **more sequences at once** with the *same* loaded weights. Load the weight once, use it for 64 sequences instead of 1, and you've roughly 64×'d your intensity for free. That single insight drives almost every throughput optimization in this document.
+The most important corollary, and the reason batching exists is the way you raise decode's arithmetic intensity is to process **more sequences at once** with the *same* loaded weights. Load the weight once, use it for 64 sequences instead of 1, and you've roughly 64×'d your intensity for free. That single insight drives almost every throughput optimization in this document.
 
-### Why the hardware specs matter
+## Why the hardware specs matter
 
 You don't need to memorize datacenter GPU sheets, but a couple of numbers anchor the intuition:
 
-| | A100 80GB (SXM) | H100 80GB (SXM) |
-|---|---|---|
-| HBM bandwidth | ~2.0 TB/s (HBM2e) | ~3.35 TB/s (HBM3) |
-| Compute (dense) | 312 TFLOPS (FP16) | ~990 TFLOPS (BF16), ~1,979 TFLOPS (FP8) |
-| NVLink (per GPU) | 600 GB/s | 900 GB/s |
-
-A common mistake (the marketing decks do this) is to quote the H100 at **~3,958 TFLOPS FP8**. That figure assumes **2:4 structural sparsity** — half the weights pruned in a fixed pattern. Real dense inference gets you ~1,979. Use the dense number for capacity planning unless you've actually deployed sparsity.
+|                  | A100 80GB (SXM)   | H100 80GB (SXM)                         |
+| ---------------- | ----------------- | --------------------------------------- |
+| HBM bandwidth    | ~2.0 TB/s (HBM2e) | ~3.35 TB/s (HBM3)                       |
+| Compute (dense)  | 312 TFLOPS (FP16) | ~990 TFLOPS (BF16), ~1,979 TFLOPS (FP8) |
+| NVLink (per GPU) | 600 GB/s          | 900 GB/s                                |
 
 Notice what changed from A100 to H100: bandwidth went up ~1.64×, which directly speeds up memory-bound **decode**, and FP8 compute jumped a lot, which speeds up compute-bound **prefill**. The two phases benefit from two different parts of the upgrade. That's the prefill/decode split showing up even in the hardware roadmap.
 
 ---
 
-## The metrics that actually matter
+## Metrics that actually matter are:
 
-Before optimizing anything, you have to agree on what you're measuring, and averages will lie to you.
+Before optimizing anything, you have to agree on what you're measuring and averages will lie to you.
 
-- **TTFT** — Time To First Token. Dominated by prefill (and by queue wait before prefill even starts). This is what makes a chat feel responsive.
-- **ITL / TPOT** — Inter-Token Latency. How fast tokens stream after the first. A human reads ~5–10 tokens/sec, so an ITL under ~100 ms feels smooth; agents and tool-callers want it much lower.
-- **Throughput** — total tokens/sec across all requests, or QPS at the macro level. This is the cost metric: it's how many users one GPU pays for.
-- **Goodput** — the number people forget. It's throughput *that meets your SLO*. A server doing 10,000 tok/s while violating its TTFT target is producing zero goodput. Optimize for this, not raw throughput.
+- **TTFT( Time To First Token)**: Dominated by prefill (and by queue wait before prefill even starts). This is what makes a chat feel responsive.
+- **ITL / TPOT (Inter-Token Latency):** How fast tokens stream after the first. A human reads ~5–10 tokens/sec, so an ITL under ~100 ms feels smooth; agents and tool-callers want it much lower.
+- **Throughput**: Total tokens/sec across all requests, or QPS at the macro level. This is the cost metric: it's how many users one GPU pays for.
+- **Goodput**: The number people forget. It's throughput *that meets your SLO*. A server doing 10,000 tok/s while violating its TTFT target is producing zero goodput. Optimize for this, not raw throughput.
 
-And always at **percentiles**, never means. A system can have a p50 TTFT of 100 ms and a p99 of 2,500 ms — and your worst-served 1% of users *are* your power users hammering it. Tail latency is the real product. In any fan-out architecture (an agent making 10 parallel sub-calls), the slowest of the 10 sets the wall-clock, so the tail compounds.
+And always at **percentiles**, never means. A system can have a p50 TTFT of 100 ms and a p99 of 2,500 ms and your worst-served 1% of users *are* your power users hammering it. Tail latency is the real product. In any fan-out architecture (an agent making 10 parallel sub-calls), the slowest of the 10 sets the wall-clock, so the tail compounds.
 
-A reasonable real-time chat SLO looks like: **p99 TTFT ≤ 400 ms, p99 ITL ≤ 50 ms.** Write the targets down before you tune, because every optimization below trades one of these against another.
+A reasonable real-time chat SLO looks like: **p99 TTFT ≤ 400 ms, p99 ITL ≤ 50 ms.** These are the most important targets before you tune because every optimization below trades one of these against another.
 
 ---
 
-## The central tension: latency vs throughput
+# The central tension: latency vs throughput
 
-Here's the conflict at the heart of serving. Batching is how you get throughput — share the weight-loading cost across many sequences. But batching is also how you *hurt* latency:
+Here's the conflict at the heart of serving. Batching is how you get throughput? share the weight-loading cost across many sequences. But batching is also how you *hurt* latency:
 
-1. A bigger batch means each forward pass does more work, so every token takes longer → **ITL goes up** for everyone in the batch.
-2. To *form* a big batch you sometimes hold early requests in a queue waiting for friends to arrive → **TTFT goes up**.
+1. A bigger batch means each forward pass does more work, so every token takes longer so **ITL goes up** for everyone in the batch.
+2. To *form* a big batch you sometimes hold early requests in a queue waiting for friends to arrive and **TTFT goes up**.
 
 So the same lever that maximizes your dollar-efficiency degrades your responsiveness. There's no setting that wins both; there's only the operating point you choose.
 
@@ -96,11 +94,11 @@ So the same lever that maximizes your dollar-efficiency degrades your responsive
 
 It helps to think of the engine as a queue with arrival rate $\lambda$ and service rate $\mu$. The classic M/M/1 result for average time in system is:
 
-$$
-T_s = \frac{1}{\mu - \lambda}, \qquad \rho = \frac{\lambda}{\mu}
+$$  
+T_s = \frac{1}{\mu - \lambda}, \qquad \rho = \frac{\lambda}{\mu}  
 $$
 
-The exact formula is a lie for LLMs — service times aren't exponential, and batching means requests are served in interfering groups, not one at a time. But the *shape* is exactly right and worth burning into your head: as utilization $\rho \to 1$, wait time goes to infinity, **non-linearly**. The last 10% of utilization costs you the most latency you'll ever pay.
+The exact formula is a lie for LLMs, service times aren't exponential and batching means requests are served in interfering groups, not one at a time. But the *shape* is exactly right and worth burning into your head: as utilization $\rho \to 1$, wait time goes to infinity, **non-linearly**. The last 10% of utilization costs you the most latency you'll ever pay.
 
 ```
  latency
@@ -118,17 +116,17 @@ The exact formula is a lie for LLMs — service times aren't exponential, and ba
                    run here, not past it
 ```
 
-The practical takeaway: to hold a tight p99, you have to **cap utilization with headroom** — often around 70% — so the system can absorb bursts without the queue exploding. The 30% you "waste" is what buys your tail latency. Engineers new to this try to run the fleet at 95% to save money and then can't understand why p99 is on fire.
+The practical takeaway: to hold a tight p99, you have to **cap utilization with headroom**, often around 70% so the system can absorb bursts without the queue exploding. The 30% you "waste" is what buys your tail latency. Engineers new to this try to run the fleet at 95% to save money and then can't understand why p99 is on fire.
 
 ---
 
-## Batching done right
+# Batching:
 
-This is where most of the throughput comes from, and it has a clear evolution.
+This is where most of the throughput comes from and it has a clear evolution.
 
-### Static batching is a trap for generation
+## 1) Static batching is a trap for generation
 
-Static batching waits for N requests, runs them as a fixed group, and returns when *all* are done. For fixed-size work (image classification) it's fine. For text generation it's terrible, because output lengths vary wildly. Batch a request that emits 10 tokens with one that emits 500, and the short one finishes early but its GPU slot stays *occupied and padded* until the 500-token straggler is done. You burn most of the batch on idle padding. GPU utilization can fall below ~25% of what the hardware can do.
+Static batching waits for N requests, runs them as a fixed group and returns when *all* are done. For fixed-size work (image classification) it's fine. For text generation it's terrible, because output lengths vary wildly. Batch a request that emits 10 tokens with one that emits 500 and the short one finishes early but its GPU slot stays *occupied and padded* until the 500-token straggler is done. You burn most of the batch on idle padding. GPU utilization can fall below ~25% of what the hardware can do.
 
 ```
 Static batch (■ = real compute, · = wasted padding):
@@ -138,14 +136,14 @@ Static batch (■ = real compute, · = wasted padding):
                   └──────── everyone waits for B ────────┘
 ```
 
-### Continuous (iteration-level) batching
+## 2) Continuous (iteration-level) batching
 
 The fix, popularized by Orca and then vLLM, is to make batching decisions **every single token step** instead of per request. After each forward pass:
 
 1. Any sequence that just emitted `<EOS>` is **evicted** immediately and its slot freed.
 2. Waiting requests are **admitted** into the freed slots on the very next step.
 
-The batch is now a living thing — sequences join and leave mid-flight. The GPU never sits idle waiting for a straggler, because the moment a slot opens it gets refilled. This is the single biggest throughput win in modern serving, often several-fold over static batching.
+The batch is now a living thing, sequences join and leave mid-flight. The GPU never sits idle waiting for a straggler, because the moment a slot opens it gets refilled. This is the single biggest throughput win in modern serving, often several-fold over static batching.
 
 ```
 Continuous batch (slots refill as soon as they free up):
@@ -157,10 +155,10 @@ Continuous batch (slots refill as soon as they free up):
 
 Two knobs govern the dynamic batcher:
 
-- **`max_batch_size`** — the hard ceiling, set by GPU memory and the latency you'll tolerate.
-- **`max_queue_delay`** — how long you'll hold a request to let a batch grow. Small values favor TTFT; larger ones favor throughput.
+- `max_batch_size` : the hard ceiling, set by GPU memory and the latency you'll tolerate.
+- `max_queue_delay` : how long you'll hold a request to let a batch grow. Small values favor TTFT and larger ones favor throughput.
 
-Here's the scheduler loop in spirit. Treat it as illustrative, not production code — the real ones live in C++/CUDA and are far hairier — but it shows the structure: an async loop that evicts finished work, refills from a queue under a delay deadline, and offloads the GPU pass off the event loop so tokenization doesn't block it.
+Here's the scheduler loop in spirit. Treat it as illustrative, not production code, the real ones live in C++/CUDA and are far hairier but it shows the structure: an async loop that evicts finished work, refills from a queue under a delay deadline, and offloads the GPU pass off the event loop so tokenization doesn't block it.
 
 ```python
 import asyncio, time
@@ -206,24 +204,24 @@ class ContinuousBatcher:
             # + r["done"].set() for any that hit <EOS>
 ```
 
-### Chunked prefill: stop letting prompts stall decode
+## 3) Chunked prefill:
 
-Continuous batching has a wrinkle. Prefill is one big compute-heavy pass; decode is many tiny ones. If a 4,000-token prompt arrives, naively prefilling it monopolizes the GPU for one long step, and every other user's decode **stalls** — their ITL spikes. You see it as periodic stutter in the token stream whenever someone submits a long prompt.
+Continuous batching has a wrinkle. Prefill is one big compute-heavy pass; decode is many tiny ones. If a 4,000-token prompt arrives, naively prefilling it monopolizes the GPU for one long step and every other user's decode **stalls**, their ITL spikes. You see it as periodic stutter in the token stream whenever someone submits a long prompt.
 
-**Chunked prefill** (Sarathi-Serve, and now standard in vLLM) splits a long prefill into smaller chunks and interleaves them with ongoing decode tokens in the same batch. You give up a little raw prefill throughput in exchange for smooth, predictable ITL. It's one of those settings that doesn't change your average but dramatically tightens your tail.
+**Chunked prefill** (Sarathi-Serve and now standard in vLLM) splits a long prefill into smaller chunks and interleaves them with ongoing decode tokens in the same batch. You give up a little raw prefill throughput in exchange for smooth, predictable ITL. It's one of those settings that doesn't change your average but dramatically tightens your tail.
 
-### Preemption: what happens when you run out of cache
+## 4) Preemption:
 
 There's a subtle failure the happy-path scheduler ignores: a batch is running, all sequences are still generating, and the KV cache (next section) fills up. You can't admit anyone, and you may not even be able to *continue* everyone. The engine has to **preempt** a victim sequence and either:
 
 - **swap** its KV cache out to CPU RAM and bring it back later, or
 - **recompute** it from scratch when it's rescheduled (throw the cache away, redo the prefill).
 
-Recompute is often cheaper than you'd think because prefill is fast, and it avoids the PCIe round-trip of swapping. Either way, this is real machinery in vLLM, and it's why "out of memory" under load shows up as a latency cliff rather than a crash.
+Recompute is often cheaper than you'd think because prefill is fast, and it avoids the PCIe round-trip of swapping. Either way, this is real machinery in vLLM and it's why "out of memory" under load shows up as a latency cliff rather than a crash.
 
-### The cascading queue failure
+## 5) The cascading queue failure
 
-The nastiest production incident in serving comes from unbounded queues. Picture a traffic spike: the queue grows, TTFT climbs past the client's HTTP timeout (often 30 s), the client gives up — and **retries**. But the server never learned the original request was abandoned, so it keeps processing the orphan *and* takes the retry. Effective load multiplies. Orphaned, already-dead requests fill every batch slot, real requests get pushed further back, latency climbs, more clients time out and retry. The GPU sits at 100% utilization serving nobody. The success rate is zero.
+The nastiest production incident in serving comes from unbounded queues. Picture a traffic spike: the queue grows, TTFT climbs past the client's HTTP timeout (often 30 s), the client gives up  and **retries**. But the server never learned the original request was abandoned, so it keeps processing the orphan *and* takes the retry. Effective load multiplies. Orphaned, already-dead requests fill every batch slot, real requests get pushed further back, latency climbs, more clients time out and retry. The GPU sits at 100% utilization serving nobody. The success rate is zero.
 
 The fixes are non-negotiable for production:
 
@@ -233,31 +231,31 @@ The fixes are non-negotiable for production:
 
 ---
 
-## The KV cache: the thing you're really managing
+# The KV cache: the thing you're really managing
 
 When generating token number 500, the model needs to attend to all 499 prior tokens. Recomputing their Key and Value projections every step would be $O(N^2)$ and ruinous. So you compute each token's K and V **once** and cache them. That cache *is* the per-request state, and managing it is most of what a serving engine does.
 
 The size per token is:
 
+$$  
+\text{bytes/token} = 2 \times L \times H_{kv} \times d_{head} \times \text{bytes per element}  
 $$
-\text{bytes/token} = 2 \times L \times H_{kv} \times d_{head} \times \text{bytes per element}
-$$
 
-The leading 2 is for K and V; $L$ is layers, $H_{kv}$ is the number of **KV** heads, $d_{head}$ the head dimension. Multiply by sequence length and by concurrent requests and it gets large fast — the KV cache, not the weights, is usually what limits how many users you can batch.
+The leading 2 is for K and V; $L$ is layers, $H_{kv}$ is the number of **KV** heads, $d_{head}$ the head dimension. Multiply by sequence length and by concurrent requests and it gets large fast, the KV Cache, not the weights, is usually what limits how many users you can batch.
 
-### GQA and MQA: shrink the cache at the source
+## 1) GQA and MQA: shrink the cache at the source
 
-Notice the formula scales with the number of *KV* heads. The biggest single reduction isn't a serving trick at all — it's an architecture choice baked into the model:
+Notice the formula scales with the number of *KV* heads. The biggest single reduction isn't a serving trick at all.n it's an architecture choice baked into the model:
 
 - **Multi-Head Attention (MHA):** every query head has its own K and V. Maximum cache.
 - **Multi-Query Attention (MQA):** all query heads share **one** K/V head. Tiny cache, some quality loss.
-- **Grouped-Query Attention (GQA):** the middle ground — groups of query heads share a K/V head. This is what modern models use.
+- **Grouped-Query Attention (GQA):** the middle ground where groups of query heads share a K/V head. This is what modern models use.
 
-Concretely, Llama-2-70B has 64 query heads but only **8** KV heads (GQA). That's an **8× smaller** KV cache than full MHA would be — which means ~8× more concurrent sequences per GPU, for almost no quality cost. When someone asks why a newer model serves so much cheaper, GQA is often the answer. As a serving engineer you don't choose this, but you absolutely need to read it off the config because it dominates your memory budget.
+Concretely, Llama-2-70B has 64 query heads but only **8** KV heads (GQA). That's an **8× smaller** KV cache than full MHA would be which means ~8× more concurrent sequences per GPU, for almost no quality cost. When someone asks why a newer model serves so much cheaper, GQA is often the answer. As a serving engineer you don't choose this, but you absolutely need to read it off the config because it dominates your memory budget.
 
-### PagedAttention: stop fragmenting memory
+## 2) PagedAttention:
 
-Even with GQA, naive cache management wastes most of your memory. The old approach pre-allocated one big contiguous block per request, sized for the *maximum possible* length. A request that generates 50 tokens but reserved space for 4,096 wastes 99% of its allocation. Across many requests you get massive internal and external fragmentation — vLLM's paper measured effective utilization around 20–40%.
+Even with GQA, naive cache management wastes most of your memory. The old approach pre-allocated one big contiguous block per request, sized for the *maximum possible* length. A request that generates 50 tokens but reserved space for 4,096 wastes 99% of its allocation. Across many requests you get massive internal and external fragmentation. vLLM's paper measured effective utilization around 20–40%.
 
 **PagedAttention** steals the idea of virtual memory from operating systems. Chop the KV cache into fixed-size **blocks** (e.g. 16 tokens each). A request's logical sequence of tokens maps, through a **block table**, to physically scattered blocks anywhere in GPU memory. You allocate blocks on demand as the sequence grows, so there's no over-reservation and essentially no fragmentation. It pushed effective cache utilization above ~96%, which roughly translated to serving several times more concurrent requests on the same hardware. This is the core innovation that made vLLM vLLM.
 
@@ -270,9 +268,9 @@ Physical GPU memory (scattered, no gaps wasted):
   ... [blk 7] ... [blk 2] ......... [blk 9] ...
 ```
 
-### Prefix caching: don't recompute the same prompt twice
+## 3) Prefix caching:
 
-Once the cache lives in shareable blocks, a beautiful optimization falls out. Tons of requests share a prefix — the same long system prompt, the same few-shot examples, the same retrieved document in a RAG pipeline. With block-level caching you compute that prefix's KV blocks **once** and let every later request that shares it just *point at the same physical blocks*. Reference-count them, and use copy-on-write so a request that diverges gets its own fork.
+Once the cache lives in shareable blocks, a beautiful optimization falls out. Tons of requests share a prefix, the same long system prompt, the same few-shot examples, the same retrieved document in a RAG pipeline. With block-level caching you compute that prefix's KV blocks **once** and let every later request that shares it just *point at the same physical blocks*. Reference-count them, and use copy-on-write so a request that diverges gets its own fork.
 
 Engines track these shared prefixes with a radix tree over token sequences. The payoff is direct: for a recurring prefix the prefill is essentially **skipped**, which slashes TTFT and frees compute. In a RAG or agent system where every call carries the same 2,000-token system preamble, this is one of the highest-ROI features you can turn on.
 
@@ -280,12 +278,12 @@ Engines track these shared prefixes with a radix tree over token sequences. The 
 
 Two more levers when memory is tight:
 
-- **KV cache quantization** — store K/V in FP8 (or lower) instead of FP16, halving the cache for a small accuracy hit. Lets you roughly double context length or batch size.
-- **KV offloading** — page cold blocks out to CPU RAM (or NVMe) and pull them back when needed. Buys capacity at the cost of PCIe bandwidth; useful for very long contexts that don't fit in HBM.
+- **KV cache quantization**: store K/V in FP8 (or lower) instead of FP16, halving the cache for a small accuracy hit. Lets you roughly double context length or batch size.
+- **KV offloading**: page cold blocks out to CPU RAM (or NVMe) and pull them back when needed. Buys capacity at the cost of PCIe bandwidth; useful for very long contexts that don't fit in HBM.
 
 ---
 
-## FlashAttention: a different problem than PagedAttention
+# FlashAttention:
 
 People conflate these two because both have "attention" in the name, but they fix different things. PagedAttention is about *where the KV cache lives in memory*. **FlashAttention** is about *how the attention math is computed*.
 
@@ -303,8 +301,8 @@ Decode is memory-bound, so the most direct way to speed it up is to make the wei
 
 Map high-precision weights (FP16/BF16) onto a coarser grid (INT8, INT4, FP8, FP4). Uniform quantization is:
 
-$$
-W_q = \text{clip}\!\left(\text{round}\!\left(\frac{W}{S}\right) + Z,\; q_{min},\; q_{max}\right), \qquad \hat{W} = S\,(W_q - Z)
+$$  
+W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z, q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)  
 $$
 
 where $S$ is a scale and $Z$ a zero-point. At INT4 you've cut weight memory ~4× versus FP16, which roughly speeds up the memory-bound decode by a similar factor — the headline reason quantization is everywhere.
@@ -329,8 +327,8 @@ Quantization shrinks the representation; distillation shrinks the **model**. You
 
 - **Response-based** distillation has the student match the teacher's softened output distribution. You raise the softmax temperature $T>1$ to spread probability mass, which exposes the teacher's "dark knowledge" — the relative likelihoods among *wrong* answers, which carry a lot of signal. The loss is the KL divergence between the two distributions:
 
-$$
-q_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}
+$$  
+q_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}  
 $$
 
 - **Feature-based** distillation goes deeper, aligning the student's *intermediate* hidden states to the teacher's (with a projection to bridge the size gap), not just the final output.
@@ -353,7 +351,7 @@ The acceptance rule per drafted token $x$: if the target assigns it at least as 
 
 Two outcomes people routinely mix up:
 
-- **On the first rejection**, you stop, throw away the rest of the draft, and resample *that one position* from the adjusted residual distribution $\propto \max(0,\, P_{target}(x) - P_{draft}(x))$. That keeps the math exact.
+- **On the first rejection**, you stop, throw away the rest of the draft, and resample *that one position* from the adjusted residual distribution $\propto \max(0, P_{target}(x) - P_{draft}(x))$. That keeps the math exact.
 - **If all $K$ are accepted**, you get a free **bonus token** from the target's final position — the extra token you scored "for free" in the same pass.
 
 When the draft is good (high acceptance rate $\alpha$), this routinely gives **2–3× faster decode** with identical output. When $\alpha$ is low, you waste compute drafting and verifying tokens you throw away, and it can be *slower* than not speculating — which is why acceptance rate is a metric you watch.
@@ -417,13 +415,13 @@ Split by *layers* (inter-layer sharding): GPU 0 holds layers 1–20, GPU 1 holds
 
 Mixture-of-Experts models (Mixtral, DeepSeek-V3) only activate a couple of "expert" FFNs per token, so they have huge parameter counts but modest per-token compute. You shard by placing different experts on different GPUs. A **router** picks experts per token, and an **all-to-all** collective shuffles each token to wherever its experts live and the results back. The challenge is *load balance* — if everyone's tokens want the same expert, that GPU melts while others idle. EP is its own discipline and increasingly central as MoE eats the frontier.
 
-| | Data (DP) | Tensor (TP) | Pipeline (PP) | Expert (EP) |
-|---|---|---|---|---|
-| Splits what | whole replicas | weight matrices | layers | experts (MoE) |
-| Communication | none (HTTP) | very high (2× all-reduce/layer) | moderate (P2P activations) | high (all-to-all) |
-| Interconnect needed | Ethernet | NVLink only | PCIe/InfiniBand OK | NVLink/fast fabric |
-| Memory per GPU | 100% of model | 1/N model + 1/N KV | 1/N model (by layer) | 1/N experts |
-| Primarily buys you | throughput | latency + fit | fit + throughput | MoE fit |
+|                     | Data (DP)      | Tensor (TP)                     | Pipeline (PP)              | Expert (EP)        |
+| ------------------- | -------------- | ------------------------------- | -------------------------- | ------------------ |
+| Splits what         | whole replicas | weight matrices                 | layers                     | experts (MoE)      |
+| Communication       | none (HTTP)    | very high (2× all-reduce/layer) | moderate (P2P activations) | high (all-to-all)  |
+| Interconnect needed | Ethernet       | NVLink only                     | PCIe/InfiniBand OK         | NVLink/fast fabric |
+| Memory per GPU      | 100% of model  | 1/N model + 1/N KV              | 1/N model (by layer)       | 1/N experts        |
+| Primarily buys you  | throughput     | latency + fit                   | fit + throughput           | MoE fit            |
 
 In practice you **combine** them: TP within a node, PP across nodes, DP across the whole fleet, EP for the MoE layers. The art is matching each axis to the interconnect that can afford its communication.
 
@@ -494,8 +492,8 @@ A serving process like vLLM grabs ~90% of GPU VRAM **at startup** to pre-allocat
 
 Autoscale on **queue depth and KV-cache utilization** instead. With KEDA + Prometheus you read runtime metrics (`vllm:num_requests_running`, queue depth) and size the fleet by capacity per replica:
 
-$$
-\text{replicas} = \left\lceil \frac{\text{total pending + active requests}}{\text{requests one replica can serve within SLO}} \right\rceil
+$$  
+\text{replicas} = \left\lceil \frac{\text{total pending + active requests}}{\text{requests one replica can serve within SLO}} \right\rceil  
 $$
 
 The best **leading** indicator is KV-cache utilization: once it crosses ~75–80%, the engine is about to stop admitting new sequences and your tail is about to spike — so scale out *before* it hits the wall, not after. Scaling on lagging latency metrics means you only react once users are already hurting.
