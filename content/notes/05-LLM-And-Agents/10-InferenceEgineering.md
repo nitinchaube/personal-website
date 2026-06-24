@@ -506,7 +506,7 @@ The fix is `.safetensors` + **memory-mapping**. Stage weights on fast local stor
 
 ### Rollouts when "correct" is undefined
 
-You can't unit-test an LLM the way you test a function  -  generation is non-deterministic and "right" is fuzzy. So you de-risk deploys with traffic, not assertions:
+You can't unit-test an LLM the way you test a function  -  generation is non-deterministic and "right " is fuzzy. So you de-risk deploys with traffic, not assertions:
 
 - **Shadow deployment:** mirror a slice of real traffic to the new version *asynchronously*. Users only ever see the old version's response; an offline pipeline compares TTFT, ITL, and quality/perplexity of the shadow. Catches regressions with zero user risk.
 - **Canary release:** route a small % of *live* traffic to the new version and watch the metrics before ramping. Critically, keep **session stickiness**  -  a user mid-conversation must not bounce between versions, or their prefix cache misses and quality wobbles visibly.

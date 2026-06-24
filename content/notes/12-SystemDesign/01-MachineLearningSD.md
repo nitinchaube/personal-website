@@ -70,13 +70,13 @@ Use **embeddings** for high-cardinality IDs (user, product) instead of one-hot, 
 
 **Feature store.** Its job is to define each feature **once** and serve the **same value at training and serving time**, plus versioning and freshness. Without it, the training feature (written in a notebook) and the serving feature (reimplemented in production) drift apart. It is built as two stores from one set of transformations:
 
-| | Offline store | Online store |
-|---|---|---|
-| Computed by | Batch (Spark, SQL), hourly to nightly | Streaming / on-request (Flink) |
-| Backed by | Warehouse, parquet | Low-latency KV (Redis, DynamoDB) |
-| Latency | Seconds to minutes (fine for training) | Single-digit ms (serving budget) |
-| Used for | Training and batch scoring | Real-time serving |
-| Example | "Avg order value, nightly" | "Items in cart now", "clicks in last 5 min" |
+|             | Offline store                          | Online store                                |
+| ----------- | -------------------------------------- | ------------------------------------------- |
+| Computed by | Batch (Spark, SQL), hourly to nightly  | Streaming / on-request (Flink)              |
+| Backed by   | Warehouse, parquet                     | Low-latency KV (Redis, DynamoDB)            |
+| Latency     | Seconds to minutes (fine for training) | Single-digit ms (serving budget)            |
+| Used for    | Training and batch scoring             | Real-time serving                           |
+| Example     | "Avg order value, nightly"             | "Items in cart now", "clicks in last 5 min" |
 
 **Batch vs streaming features: freshness vs cost.** Batch is cheap and simple but stale by hours; streaming is seconds-fresh but operationally expensive (stateful stream jobs, exactly-once concerns). The design rule: pay for streaming only where freshness changes the prediction (in-session intent, fraud velocity counts), and keep slow-moving profile features in batch. (Feast, Tecton, Vertex / SageMaker FS.)
 
@@ -109,11 +109,8 @@ Point-in-time is about **time** (no future data); skew is about **consistency** 
 **Similarity measures.**
 
 - **Cosine similarity** (the default): measures the angle between vectors, ignoring magnitude.
-
   `cos(a, b) = (a · b) / (||a|| * ||b||)`, range `[-1, 1]`, where 1 means identical direction.
-
 - **Dot product** `a · b`: faster (no normalization) and the standard choice when the model was trained with it, but it is sensitive to magnitude, so a longer document can score higher just for being longer.
-
 - **Euclidean (L2) distance** `||a - b||`: used for some image and clustering tasks.
 
 **Key identity:** if all vectors are L2-normalized to unit length, cosine, dot product, and Euclidean distance all rank neighbors identically. The production pattern is therefore **normalize once at index time, then use plain dot product at query time** to get cosine ranking at maximum speed.
@@ -148,11 +145,11 @@ Two knobs:
 
 You cannot maximize recall, latency, and memory at once:
 
-| Lever | Effect |
-|---|---|
-| Raise `efSearch` / `M` (HNSW) | Recall up, latency and memory up |
-| **Quantization** (PQ, scalar) | Memory down a lot, recall down slightly |
-| More shards / replicas | Latency down (parallelism), infra cost up |
+| Lever                         | Effect                                    |
+| ----------------------------- | ----------------------------------------- |
+| Raise `efSearch` / `M` (HNSW) | Recall up, latency and memory up          |
+| **Quantization** (PQ, scalar) | Memory down a lot, recall down slightly   |
+| More shards / replicas        | Latency down (parallelism), infra cost up |
 
 **Product Quantization (PQ)** splits each vector into sub-vectors and replaces each with a codebook id, cutting memory 8x to 32x at a modest recall cost. This is how billions of vectors fit in RAM.
 
@@ -176,12 +173,12 @@ where `f(qᵢ, D)` is term frequency, `|D|` is document length, `avgdl` is avera
 
 **Semantic (vector).** Matches meaning via embeddings + ANN. Handles synonyms, paraphrase, intent. Weakness: can miss exact identifiers (an obscure SKU has no good embedding).
 
-| | Keyword (BM25) | Semantic (vector) |
-|---|---|---|
-| Matches | Exact terms | Meaning, synonyms, intent |
+|           | Keyword (BM25)                | Semantic (vector)         |
+| --------- | ----------------------------- | ------------------------- |
+| Matches   | Exact terms                   | Meaning, synonyms, intent |
 | Strong on | Rare tokens, IDs, names, code | Paraphrase, vague queries |
-| Weak on | Synonyms, vague phrasing | Exact rare identifiers |
-| Cost | Very cheap | Embedding + ANN compute |
+| Weak on   | Synonyms, vague phrasing      | Exact rare identifiers    |
+| Cost      | Very cheap                    | Embedding + ANN compute   |
 
 **Hybrid (BM25 + vector).** Run both, fuse the results, because the failure modes are complementary:
 
@@ -214,9 +211,7 @@ Pick the metric that matches the **product decision** the model drives, not the 
 - **MAP** averages precision at each relevant position, then over queries. Rewards early placement; relevance is binary.
 - **MRR** = mean of `1 / rank of the first relevant result`; the metric when only the first hit matters (question answering, navigational search).
 - **NDCG** is the standard for graded relevance:
-
   `DCG@k = Σᵢ (2^relᵢ - 1) / log₂(i + 1)`, `NDCG@k = DCG@k / IDCG@k ∈ [0, 1]`
-
   Two design choices encoded: highly relevant items worth exponentially more (`2^rel`), and lower positions discounted logarithmically because users see them less.
 
 **The mapping: recall@k for retrieval, NDCG@k for ranking, MRR for first-hit tasks, PR-AUC for rare events, ROC-AUC for balanced comparison.** Always slice by segment (new users, rare categories, languages); a healthy global average routinely hides a broken segment.
@@ -300,22 +295,104 @@ New users and new items have no interaction history. Mitigations:
 
 ---
 
-# Ranking Deep Dive: LTR, Position Bias, Calibration
+# Ranking Deep Dive: LTR, Position Bias, Calibration, Serving
 
-**Learning to Rank (LTR)** has three formulations:
+When you move a ranking model from offline evaluation into production, two problems dominate everything else: **position bias** in the training data, and **calibration** when scores get multiplied by money. Standard ranking metrics (NDCG, AUC) optimize relative order; production systems often need debiased relevance and true probabilities.
+
+## Learning to Rank (LTR)
+
+Three formulations:
 
 - **Pointwise:** predict each item's score independently (CTR as binary classification). Simple, but ignores that ranking is relative.
 - **Pairwise:** learn "A above B" from preference pairs (RankNet, LambdaRank). Matches the actual task better.
 - **Listwise:** optimize the list-level metric (NDCG) directly (LambdaMART, still the GBDT workhorse of search ranking; see [Burges 2010, From RankNet to LambdaRank to LambdaMART](https://www.microsoft.com/en-us/research/publication/from-ranknet-to-lambdarank-to-lambdamart-an-overview/)).
 
-**Position bias.** Users click the top result partly because it is on top, so naive training learns "position 1 is relevant" instead of true relevance. Mitigations:
+Training data comes from historical click logs, which were generated by whatever ranking system was live at the time. The model therefore learns from a **biased snapshot of the old policy**, not from a clean relevance signal. Offline NDCG answers "would the new model re-rank the old system's results better," not "what happens when it chooses for itself."
 
-- Train with **position as a feature**, then serve with it fixed to a constant, so the model cannot lean on it at inference.
-- **Counterfactual LTR:** weight clicks by inverse propensity of their position, `1 / P(examined at position p)`, estimated from randomization experiments or click models.
+## 1. Position Bias (The Data Poisoning Problem)
 
-**Calibration.** Ads and any expected-value ranking need true probabilities, not just correct order, because the score gets multiplied by a bid: `EV = P(click) × bid`. A miscalibrated model misprices every auction. Calibrate post-hoc (Platt / isotonic) and monitor calibration online.
+Users are lazy. They often click the first result because it is first, even when a lower result is a better match. If you feed raw click logs into the model, it notices that top positions get the most clicks and learns the shortcut **"position 1 = high relevance"** instead of the relationship between query features and document quality.
 
-**Multi-task ranking.** Modern rankers predict several objectives at once (click, like, share, watch-time, dissatisfaction) with a shared backbone and per-task heads (shared-bottom, or **MMoE** ([Ma 2018](https://dl.acm.org/doi/10.1145/3219819.3220007)): expert subnetworks gated per task, which handles conflicting objectives better). The final score is a tuned weighted blend: `score = w₁P(click) + w₂E[watch] + w₃P(like) - w₄P(report)`. Those weights are product policy, not learned, and are tuned through A/B tests.
+At deploy time this becomes a **self-fulfilling prophecy**: the model perpetually boosts whatever it already thinks belongs at the top, without learning what actually makes a document good. Offline metrics can look healthy while production quietly amplifies popularity and placement, not relevance.
+
+### Mitigation A: Position as a Feature
+
+An engineering hack that works well in practice. During training, feed **display position** into the model as an explicit input (often via a shallow side-tower whose output is added to the main relevance logit). The model is forced to attribute much of the click signal to position, which **isolates true relevance into the other features** (text match, quality, user × item crosses).
+
+At inference you do not know position yet — you are actively deciding it. So you **freeze position to a constant** (typically `position = 1`, or drop the side-tower entirely) for every candidate. Every document gets the same artificial "position advantage," and the model must rank on content features alone.
+
+### Mitigation B: Counterfactual LTR (Inverse Propensity Weighting)
+
+A statistical fix. **Propensity scoring** estimates how likely a user was to examine a given position: `P(examined at position p)`. Weight each click by `1 / P(examined at position p)`.
+
+| Position | P(examined) | Click weight `1/P` |
+| -------- | ----------- | ------------------ |
+| 1        | ~0.9        | ~1.1               |
+| 10       | ~0.05       | ~20                |
+
+A click at position 1 is weak evidence (the user probably looked there anyway). A click at position 10 is strong evidence — the user scrolled, found it, and chose it despite poor placement. This aggressively rewards **hidden gems** whose clicks were driven by relevance, not placement.
+
+Estimate propensities from randomized position experiments, click models, or examination models ([Joachims et al., Unbiased Learning-to-Rank](https://arxiv.org/abs/1608.04468)). Log the propensity with which each item was shown so offline eval can correct for the logging policy too.
+
+Use both levers when you can: position-as-feature for clean serving semantics, IPW when you have reliable propensity estimates and want counterfactual training.
+
+## 2. Calibration (The Auction Problem)
+
+**Organic search** (Wikipedia, internal docs) only needs **relative order**. If Document A scores 0.9 and Document B scores 0.8, A wins. It does not matter whether 0.9 means a 90% click chance or a 2% click chance.
+
+**Ads and EV ranking** need **absolute probabilities**, because money is involved. Ad auctions run on expected value:
+
+`EV = P(click) × bid`
+
+If an advertiser bids $5.00/click and true P(click) = 10%, EV = $0.50. If true P(click) = 2%, EV = $0.10. A fourfold error in probability is a fourfold error in what you charge and who wins the auction.
+
+An **uncalibrated** model can rank perfectly (A > B whenever A is more likely to be clicked) while every score is wrong on an absolute scale — e.g. output 0.9 when the real CTR is 5%. The marketplace overprices ads, wrecks advertiser ROI, and breaks auction fairness. The same failure hits any system that multiplies model output by a bid, price, or business weight: blended multi-task scores, fraud risk × exposure, conversion value × inventory cost.
+
+### Mitigation: Post-hoc Calibration
+
+Let the LTR model output **raw, uncalibrated scores**. Pass them through a separate **calibration layer** trained on held-out logs:
+
+- **Platt scaling:** fit a logistic map on a validation set (`σ(a·score + b)`).
+- **Isotonic regression:** monotonic piecewise mapping, more flexible, needs more data.
+
+If the model outputs 0.9, the calibrator checks history: "when the model said 0.9, actual CTR was 12%." It outputs **0.12** , the probability the auction needs. Monitor calibration online with **reliability diagrams** and **expected calibration error (ECE)**; recalibrate when drift shifts the score-to-rate curve. Undersampling negatives during training also inflates probabilities, recalibrate after any resampling change.
+
+## Serving Under the Budget
+
+Production ranking must fit inside a strict latency envelope (~50 to 100 ms end-to-end). The funnel exists because no heavy model can score the full catalog per request:
+
+`10,000 retrieved → lightweight ranker → 500 → heavy MTL ranker → 50 → re-rank → shown`
+
+Three levers that trade model quality against latency:
+
+| Technique                           | What it does                                                                                                                                                                                                                    | Quality ↔ latency trade-off                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Cascading / multi-stage ranking** | Cheap ranker (two-tower dot product, shallow GBDT) after retrieval cuts 10k → ~500; only that subset hits the expensive MTL ranker                                                                                              | Lose a little recall at the cascade cut; gain orders of magnitude in compute       |
+| **Sparse routing (Sparse MoE)**     | Route each example to only top-k expert sub-networks instead of running the full dense stack ([Shazeer 2017, Outrageously Large Neural Networks](https://arxiv.org/abs/1701.06538); MMoE for multi-task is the ranking variant) | High capacity at ~flat FLOPs per item; ops cost is memory for all experts resident |
+| **In-memory feature caching**       | Serve dynamic features from a low-latency KV (Redis, DynamoDB) colocated with the model, not a disk-backed DB round-trip                                                                                                        | Sub-ms feature fetch; pay freshness/complexity in the streaming feature pipeline   |
+
+**The latency math** that sets cascade sizes: if each candidate costs ~50 µs on GPU and the ranker budget is ~25 ms, you can afford ~500 candidates (`N × cost ≤ budget`). Scoring a billion items at that rate is ~50,000 seconds — nine orders of magnitude off — which is why the heavy model never touches the full corpus.
+
+```
+                    ┌─────────────────────────────────────────┐
+  Quality ─────────►│  Heavy MTL ranker (MMoE, cross-feats)   │◄── few hundred candidates
+       ▲            └─────────────────────────────────────────┘
+       │                              ▲
+       │            ┌─────────────────┴───────────────────┐
+       │            │  Lightweight cascade ranker           │◄── ~10k from retrieval
+       │            └─────────────────────────────────────┘
+       │                              ▲
+       │            ┌─────────────────┴───────────────────┐
+       └────────────│  ANN retrieval (two-tower, BM25…)     │◄── millions
+                    └─────────────────────────────────────┘
+  Latency ◄──────── each stage is cheaper and faster left-to-right
+```
+
+Tune the cascade cut by offline recall@k (did the heavy ranker's best items survive the filter?) and online guardrails on p99 latency. Adding one layer or one cross-feature is a recurring hardware cost at `10^5` QPS × hundreds of candidates per request.
+
+## Multi-task Ranking
+
+Modern rankers predict several objectives at once (click, like, share, watch-time, dissatisfaction) with a shared backbone and per-task heads (shared-bottom, or **MMoE** ([Ma 2018](https://dl.acm.org/doi/10.1145/3219819.3220007)): expert subnetworks gated per task, which handles conflicting objectives better). The final score is a tuned weighted blend: `score = w₁P(click) + w₂E[watch] + w₃P(like) - w₄P(report)`. Those weights are product policy, not learned, and are tuned through A/B tests. **Each head that enters the blend must be calibrated**, or one inflated probability silently dominates the product score.
 
 ---
 
@@ -419,11 +496,11 @@ Supporting techniques: **mixed precision** (BF16 compute with FP32 master weight
 
 **The build decision: prompt vs RAG vs fine-tune.** The most common LLM design question, resolved by what is actually missing:
 
-| Missing | Use | Why |
-|---|---|---|
-| Nothing much (capability exists) | **Prompting** | Cheapest, fastest to iterate, no training |
-| **Knowledge** (private, fresh, factual) | **RAG** | Updatable instantly, sources citable, no retraining for new facts |
-| **Behavior** (format, style, domain dialect) | **Fine-tuning** | Bakes in consistent behavior; does NOT reliably add facts |
+| Missing                                      | Use             | Why                                                               |
+| -------------------------------------------- | --------------- | ----------------------------------------------------------------- |
+| Nothing much (capability exists)             | **Prompting**   | Cheapest, fastest to iterate, no training                         |
+| **Knowledge** (private, fresh, factual)      | **RAG**         | Updatable instantly, sources citable, no retraining for new facts |
+| **Behavior** (format, style, domain dialect) | **Fine-tuning** | Bakes in consistent behavior; does NOT reliably add facts         |
 
 Rules of thumb: knowledge problems are RAG problems, behavior problems are fine-tuning problems, and you exhaust prompting before paying for either. They compose: a fine-tuned model inside a RAG pipeline is common.
 
@@ -539,14 +616,14 @@ The third scaling axis. After pretraining compute and data, the frontier discove
 
 **What each frontier lab's signature move is** (interview-ready attribution):
 
-| Lab | Signature contributions to agents |
-|---|---|
-| **Anthropic** | Context engineering doctrine, orchestrator-worker multi-agent, MCP, computer use, constitutional classifiers, interleaved/extended thinking |
-| **Google / DeepMind** | CaMeL injection defense, A2A protocol, ScaNN retrieval infra, Gemini thinking budgets |
-| **OpenAI** | Test-time compute at scale (o-series), function calling as the tool-use standard, deep research |
-| **DeepSeek** | R1: RLVR at scale with an open recipe, reasoning distillation |
-| **Meta** | Open weights (Llama) powering most self-hosted agents, Toolformer lineage for tool use |
-| **Cognition / Manus** | Single-agent context discipline, file system as memory, KV-cache-aware agent design |
+| Lab                   | Signature contributions to agents                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic**         | Context engineering doctrine, orchestrator-worker multi-agent, MCP, computer use, constitutional classifiers, interleaved/extended thinking |
+| **Google / DeepMind** | CaMeL injection defense, A2A protocol, ScaNN retrieval infra, Gemini thinking budgets                                                       |
+| **OpenAI**            | Test-time compute at scale (o-series), function calling as the tool-use standard, deep research                                             |
+| **DeepSeek**          | R1: RLVR at scale with an open recipe, reasoning distillation                                                                               |
+| **Meta**              | Open weights (Llama) powering most self-hosted agents, Toolformer lineage for tool use                                                      |
+| **Cognition / Manus** | Single-agent context discipline, file system as memory, KV-cache-aware agent design                                                         |
 
 **Workflow vs agent** ([Anthropic, Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)). A workflow is a fixed DAG with LLM calls inside (predictable, debuggable, cheap); an agent chooses its own next action in a loop (flexible, expensive, compounding errors). Default to workflows; use an agent only when the path genuinely cannot be known in advance. Most production "agents" should be workflows.
 

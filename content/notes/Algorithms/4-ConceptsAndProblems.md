@@ -1613,7 +1613,11 @@ class WordDictionary:
 ### (GOOGLE) Problem LC 212: Word Search II ([link](https://leetcode.com/problems/word-search-ii/))
 
 ```python
-class Solution:
+class TrieNode:
+    def __init__(self):
+        self.children = {}
+        self.word = None
+ Solution:
     def findWords(self, board: List[List[str]], words: List[str]) -> List[str]:
         root = TrieNode()
         for word in words:
