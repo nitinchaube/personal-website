@@ -34,6 +34,8 @@ A compact recap for last-minute review.
 
 **Five things that break agents:** latency, context dilution, visuomotor grounding, reward hacking, and prompt injection.
 
+**Guardrails, layer by layer:** check the **input** (injection, PII, moderation), the **output** (moderation, leakage, groundedness), every **action** (allowlist, argument validation, sandbox, human approval), and the **loop** itself (step and cost caps), all wrapped in audit logging. It is defense in depth, because no single check is ever complete.
+
 ---
 
 # Overview
@@ -724,6 +726,142 @@ When one agent's context, tools, or expertise is not enough, the work is split a
 - **Blackboard:** agents share a common workspace where they post and read partial results instead of messaging each other directly.
 
 Multi-agent systems give you parallelism and specialization, but they cost more tokens and add failure modes: agents can talk past each other, duplicate work, or amplify one another's mistakes. A recurring problem is **information asymmetry**, where each agent holds private data it cannot fully share (see Challenges). Use multiple agents only when a single agent genuinely cannot hold enough context or expertise on its own.
+
+---
+
+# Guardrails
+
+An autonomous agent reads untrusted text, decides for itself what to do, and can reach into the real world with tools. That combination is powerful and genuinely risky, so production agents are wrapped in **guardrails**: checks placed at every boundary where the agent takes in input, produces output, performs an action, or loops. The right way to think about them is **defense in depth**. No single check is complete, so you layer several cheap, narrow ones and accept that each catches a different slice of the risk.
+
+The boundaries are easiest to see as a picture. Every stage the agent passes through has a guardrail in front of it, and the whole loop sits inside an audit log.
+
+```
+   trusted: user goal ─┐
+   UNTRUSTED: web,     ├─▶ ┌────────────────────────────────────────────┐
+   email, RAG docs,    │   │ INPUT GUARDRAILS                           │
+   tool results       ─┘   │ injection · jailbreak · PII · moderation   │
+                           └─────────────────────┬──────────────────────┘
+                                                 ▼
+                                       ┌───────────────────┐
+                              ┌───────▶│  AGENT REASONING  │
+                              │        │   plan · decide   │
+                              │        └─────────┬─────────┘
+            LOOP GUARDRAILS ──┤                  ▼
+            step & cost caps  │        ┌────────────────────────┐
+            loop detection    │        │  ACTION GUARDRAILS     │
+            plan validation   │        │  allowlist · arg check │
+                              │        │  sandbox · HITL gate   │
+                              │        └───────────┬────────────┘
+                              │                    ▼
+                              │              ┌────────────┐
+                              └──────────────│ TOOL / ENV │
+                                observation  └─────┬──────┘
+                                loops back         │ final answer
+                                       ┌───────────▼───────────────────────┐
+                                       │ OUTPUT GUARDRAILS                  │
+                                       │ moderation · PII · groundedness    │
+                                       └───────────────┬────────────────────┘
+                                                       ▼
+                                                     user
+
+   ─── everything above is wrapped in AUDIT LOGGING + TRACING ───
+```
+
+The sections below walk the layers from the outside in, then cover how guardrails are built and what happens when one trips.
+
+### 1) Input Guardrails
+
+These run on everything that enters the system before the agent reasons about it: the user message, retrieved documents, tool results, and messages from other agents. The untrusted sources (fetched web pages, emails, RAG chunks) are the dangerous part, because the agent cannot tell instructions from data on its own.
+
+- **Prompt-injection and jailbreak detection.** The signature agentic risk. Malicious instructions hidden inside user input or, more sneakily, inside content the agent fetches. The classic shape is "ignore your previous instructions and instead do X." This is the front-line defense for the prompt-injection challenge described in the next section.
+- **Content moderation.** Screen input for toxicity, hate, violence, sexual content, and self-harm.
+- **PII and secret detection or redaction.** Strip SSNs, API keys, and credentials before they ever reach the model.
+- **Topical and relevance filtering.** An off-topic classifier keeps the agent on its intended domain instead of being dragged elsewhere.
+- **Schema and input validation.** Confirm the input is well formed and within length or quota limits.
+- **Authentication and authorization context.** Establish who is asking and what they are allowed to do before anything runs.
+
+### 2) Output Guardrails
+
+These run on what the agent produces, after generation but before it is returned or shown to anyone.
+
+- **Content moderation** on the response itself.
+- **PII and secret-leakage detection** to stop the agent from exfiltrating sensitive data in its answer.
+- **Groundedness and hallucination checks.** Does the answer actually follow from the retrieved context? This includes citation and attribution verification.
+- **Format and schema validation.** Valid JSON, required fields, correct types, usually with an automatic retry when the check fails.
+- **Brand, tone, and policy compliance.**
+
+### 3) Tool and Action Guardrails
+
+This layer is what separates an agent's guardrails from a plain chatbot's, because it governs the agent's ability to actually do things in the world.
+
+- **Tool allowlist and denylist.** Decide up front which tools this agent may call at all.
+- **Parameter validation.** Sanitize and validate arguments before execution, for example refusing a destructive shell command, a SQL injection, or a path-traversal file path.
+- **Least-privilege scoping.** Give each tool the narrowest credentials it needs, such as read-only access instead of write.
+- **Human-in-the-loop approval.** Put high-risk or irreversible actions (moving money, deleting data, emailing outside the company) behind an explicit human confirmation.
+- **Sandboxing and isolation.** Run model-generated code or shell commands in a container or VM with no access to the host, exactly as the CodeAct section stresses.
+- **Network egress control.** Restrict which domains and APIs the agent is allowed to reach.
+- **Dry-run and simulation.** Preview an action's effect before committing it.
+- **Idempotency and rollback.** Make retries safe and give state changes an undo path.
+- **Spend and budget limits.** Cap the cost of any action that incurs charges.
+
+### 4) Control-Flow and Loop Guardrails
+
+An autonomous agent runs its own loop, so you have to bound that loop or it can run away with your budget.
+
+- **Maximum iterations or step limit**, which the ReAct loop already showed as `max_steps`.
+- **Wall-clock timeout and a token or cost budget** per task.
+- **Recursion and plan-depth limits**, especially when agents can spawn sub-agents.
+- **Loop and repetition detection** to notice when the agent is stuck repeating the same action without progress, which is the same failure Reflexion watches for.
+- **Plan validation** before execution, vetting the proposed plan rather than trusting it blindly.
+- **Clear termination conditions** so the agent has a clean way to declare itself done.
+
+### 5) Memory and Multi-Agent Guardrails
+
+- **Memory-poisoning prevention.** Stop injected content from being written into long-term memory, where it could resurface in a later run and hijack the agent after the fact.
+- **Context and staleness management**, including detecting facts that conflict with each other.
+- **Inter-agent message validation and role scoping.** In orchestrator setups, validate what one agent sends another and enforce each agent's permissions, so a single compromised worker cannot escalate across the whole system.
+
+### 6) System and Observability Guardrails
+
+- **Audit logging and tracing.** A full trail of every decision and action, which is what makes accountability and post-incident review possible at all.
+- **Access controls and secret isolation**, such as role-based access to data and keys.
+- **Kill switch and circuit breakers** to stop a misbehaving agent quickly.
+
+## The Layers at a Glance
+
+| Layer                        | What it guards against                 | Example checks                                                                   |
+| ---------------------------- | -------------------------------------- | -------------------------------------------------------------------------------- |
+| **Input**                    | Poisoned or unsafe incoming content    | injection and jailbreak detection, PII redaction, moderation, schema, auth       |
+| **Output**                   | Unsafe, leaky, or wrong responses      | moderation, PII and secret leak, groundedness, schema validation                 |
+| **Tool and action**          | Dangerous or unauthorized actions      | allowlist, argument validation, least privilege, sandbox, human approval, budget |
+| **Control flow and loop**    | Runaway loops and cost                 | step and iteration caps, time and token budgets, loop detection, plan validation |
+| **Memory and multi-agent**   | Persisted poison and cross-agent leaks | memory-poison checks, role scoping, inter-agent message validation               |
+| **System and observability** | Undetected misbehavior                 | audit logging, access controls, kill switch                                      |
+
+## How Guardrails Are Built
+
+Most real systems combine several implementation styles, again for defense in depth.
+
+| Approach                         | How it works                                                                       | Trade-off                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Rule-based and deterministic** | regex, allowlists, schema validators, permission checks                            | fast and reliable, but narrow and brittle to new phrasings |
+| **ML classifiers**               | trained moderation, PII, and jailbreak detectors (for example Llama Guard, Lakera) | broad coverage, but produces false positives and negatives |
+| **LLM-as-judge or critic**       | a second model checks groundedness, policy, or the plan                            | most flexible, but slower and costs extra tokens           |
+| **Frameworks**                   | NeMo Guardrails, Guardrails AI, and Llama Guard tie these together                 | faster to adopt, at the cost of another dependency         |
+
+## When a Guardrail Trips
+
+A guardrail needs a defined response, not just a yes-or-no verdict. The common ones:
+
+- **Block:** refuse the input, action, or output outright.
+- **Redact or sanitize:** strip the offending part and continue.
+- **Regenerate or retry:** ask the model again, often with the failure fed back in, which is the schema-validation pattern.
+- **Escalate to a human:** hand off for approval or a decision.
+- **Safe fallback:** return a canned, known-safe response.
+
+## Putting It Together
+
+The mental model is one sentence: check the input, run bounded reasoning, take a guarded and sometimes human-approved action, check the output, and log the whole loop. Pick the cheapest guardrail that covers each boundary, layer a few of them, and assume any single one will eventually be bypassed. Guardrails are the reason the autonomous agent, which is the least predictable design in this guide, can be trusted with real tools at all.
 
 ---
 

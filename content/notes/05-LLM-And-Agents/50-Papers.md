@@ -5,9 +5,6 @@ summary: "Short, easy to digest summaries of papers I've read on LLMs and agents
 tags: [LLM, Agents, AI]
 ---
 
-# Papers
-
-Quick summaries of papers I've read, written in plain language so I can actually remember what they were about without re-reading the whole thing. Grouped by topic, and within each topic I keep them roughly in the order the papers came out.
 
 # Agent Memory
 
