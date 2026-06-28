@@ -859,10 +859,6 @@ A guardrail needs a defined response, not just a yes-or-no verdict. The common o
 - **Escalate to a human:** hand off for approval or a decision.
 - **Safe fallback:** return a canned, known-safe response.
 
-## Putting It Together
-
-The mental model is one sentence: check the input, run bounded reasoning, take a guarded and sometimes human-approved action, check the output, and log the whole loop. Pick the cheapest guardrail that covers each boundary, layer a few of them, and assume any single one will eventually be bypassed. Guardrails are the reason the autonomous agent, which is the least predictable design in this guide, can be trusted with real tools at all.
-
 ---
 
 # Challenges
