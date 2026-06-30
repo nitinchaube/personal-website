@@ -108,8 +108,8 @@ Point-in-time is about **time** (no future data); skew is about **consistency** 
 
 **Similarity measures.**
 
-- **Cosine similarity** (the default): measures the angle between vectors, ignoring magnitude.
-  `cos(a, b) = (a · b) / (||a|| * ||b||)`, range `[-1, 1]`, where 1 means identical direction.
+- **Cosine similarity** (the default): measures the angle between vectors, ignoring magnitude.  
+`cos(a, b) = (a · b) / (||a|| * ||b||)`, range `[-1, 1]`, where 1 means identical direction.
 - **Dot product** `a · b`: faster (no normalization) and the standard choice when the model was trained with it, but it is sensitive to magnitude, so a longer document can score higher just for being longer.
 - **Euclidean (L2) distance** `||a - b||`: used for some image and clustering tasks.
 
@@ -210,9 +210,9 @@ Pick the metric that matches the **product decision** the model drives, not the 
 - **Recall@k** = fraction of all relevant items in the top k. The metric for **candidate generation**, whose only job is to not lose good items before the ranker.
 - **MAP** averages precision at each relevant position, then over queries. Rewards early placement; relevance is binary.
 - **MRR** = mean of `1 / rank of the first relevant result`; the metric when only the first hit matters (question answering, navigational search).
-- **NDCG** is the standard for graded relevance:
-  `DCG@k = Σᵢ (2^relᵢ - 1) / log₂(i + 1)`, `NDCG@k = DCG@k / IDCG@k ∈ [0, 1]`
-  Two design choices encoded: highly relevant items worth exponentially more (`2^rel`), and lower positions discounted logarithmically because users see them less.
+- **NDCG** is the standard for graded relevance:  
+`DCG@k = Σᵢ (2^relᵢ - 1) / log₂(i + 1)`, `NDCG@k = DCG@k / IDCG@k ∈ [0, 1]`  
+Two design choices encoded: highly relevant items worth exponentially more (`2^rel`), and lower positions discounted logarithmically because users see them less.
 
 **The mapping: recall@k for retrieval, NDCG@k for ranking, MRR for first-hit tasks, PR-AUC for rare events, ROC-AUC for balanced comparison.** Always slice by segment (new users, rare categories, languages); a healthy global average routinely hides a broken segment.
 
@@ -430,13 +430,139 @@ The model is one box; the system around it is what an interviewer wants to see y
 
 # Monitoring and Drift
 
-Models do not crash when they go stale; they degrade silently. Monitoring is the production answer to "is the model still good."
+A model rarely fails loudly. It keeps returning 200s and serving predictions while the predictions quietly get worse. Monitoring is how you find out the model went bad before a metric review or an angry user does. On a large product (Search, Ads, a feed) this is what lets a team retrain and ship every day without occasionally breaking revenue.
 
-- **Data drift:** input distribution `P(x)` shifts (new demographics, a new device type, an upstream pipeline change). Detect by comparing live feature distributions against a training reference: PSI, KL divergence, or simple percentile alarms per feature.
-- **Concept drift:** the relationship `P(y|x)` changes (user tastes shift, fraud adapts). The model is seeing familiar inputs but the right answer moved. Detect via online metric decay against a holdout or shadow baseline.
-- **Label lag:** when true labels arrive late (churn, fraud confirmation), monitor **proxy signals** (prediction distribution shape, score percentiles, feature drift) as the early-warning layer.
+Start by being precise about what "drift" means, because the fix is different for each one. Four things can move independently:
 
-**Operational responses:** scheduled retraining cadence (and event-triggered retrains on drift alarms), **shadow deployment** of the retrained model to validate before exposure, **canary** rollout, and one-click **rollback** to the previous model version (model registry with versioned artifacts is the prerequisite).
+| What moved       | Notation         | What it means                                                                                    | Does the model still work?                                 |
+| ---------------- | ---------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Data drift       | `P(x)` changed   | The inputs look different than training (new device mix, new user group, a feature pipeline bug) | Sometimes. Fine if `P(y|x)` held                           |
+| Label drift      | `P(y)` changed   | The base rate moved (CTR fell everywhere, fraud spiked)                                          | Model is fine, but accuracy numbers move                   |
+| Concept drift    | `P(y|x)` changed | Same inputs, different right answer (tastes change, attackers adapt)                             | No. The thing it learned is stale                          |
+| Prediction drift | `P(ŷ)` changed   | The model's output scores shifted                                                                | Just a symptom. Could be any of the above or a serving bug |
+
+When people say "the model drifted," they almost always mean it got worse over time. That is the symptom. The work is figuring out which of the four above caused it. The common mistake: a feature pipeline ships a small change, the data-drift alarm fires, and someone kicks off a retrain when the real fix was to roll back the pipeline.
+
+## Data drift
+
+Data drift means the features at serving time no longer look like the features the model trained on. Usual causes: a new user segment, a UI change, seasonality, a logging bug upstream, or train/serve skew that was always there and just got exposed by a new code path.
+
+What you compare is live feature distributions against a reference window. The reference is the training set or the last known-good week, not all of history. Comparing against all of history flags seasonality as drift, and seasonality is real signal.
+
+How to detect it:
+
+- **PSI (Population Stability Index).** Bucket a feature, compare the live share against the reference share in each bucket:  
+`PSI = Σ (live% - ref%) × ln(live% / ref%)`  
+Below 0.1 is stable, 0.1 to 0.25 is worth a look, above 0.25 means go investigate. It is cheap and per-feature, which is why it is the default.
+- **KL or JS divergence** between the two histograms. More sensitive than PSI, but the thresholds are harder to reason about.
+- **Schema and range checks.** These are the cheapest and catch the worst bugs: null rate jumps, values out of range, a type change, a categorical that suddenly has 10x the cardinality. Run them on every training batch and on sampled live traffic. TFDV does this on Google's stack: build a schema from training data, then validate against it.
+- **Check per slice.** Global PSI can look green while `new_users` or `ios` is red. A healthy average hides a broken segment, so watch the segments that matter.
+
+When an alarm fires: first check whether a pipeline or feature-store deploy lines up with it in time. Then compare the logged serving features against the offline features for the same entity IDs; if they disagree, it is skew, not drift. Only if it is genuine drift do you retrain on recent data or fold the new regime into training. Do not retrain to paper over a pipeline that is simply wrong.
+
+## Concept drift
+
+Concept drift is `P(y|x)` changing: the inputs look normal but the correct answer moved. Tastes shift after a big event, attackers adapt to your model, a new content type behaves differently than everything before it.
+
+It is harder to catch than data drift because the labels you need to confirm it often arrive late.
+
+- **Watch the live metrics decay,** sliced by segment. A 2% CTR drop concentrated in power users matters more than a flat global line.
+- **Compare against shadow.** If the shadow model keeps beating prod on the same traffic, that is a deploy gap, not drift. If prod metrics fall while the shadow-vs-prod score gap stays flat, concept drift or a feedback loop is the likelier story.
+- **Bucket by predicted score and track the real outcome rate over time.** If the 0.8 bucket used to convert at 12% and now converts at 6%, something moved even when AUC looks unchanged.
+- **Use proxy signals when labels lag** (churn at 30 days, fraud confirmation): the shape of the prediction distribution, engagement proxies, and human spot-checks on a sample.
+
+The fix is usually a retrain on fresh data, plus exploration to break the feedback loop. If the objective itself changed, that is a product and policy decision; retraining will not fix a target that is wrong.
+
+## Prediction and calibration drift
+
+Even with stable features, the output distribution `P(ŷ)` can move because of a model version bump, a change in ensemble weights, or a feature interaction you did not expect.
+
+- **Track score percentiles** (p50, p90, p99 of the predicted probability). These often move hours before the product metric does.
+- **Track calibration** with ECE and reliability diagrams, per head. This matters most where the score gets multiplied by money (`EV = P(click) × bid`) or where you blend several heads into one score.
+- **Track ranking stability** with something like Kendall tau or overlap@k between the old and new model on the same candidate set, before you launch.
+
+## What to actually build
+
+Think of monitoring in layers. Each layer catches a different class of problem, and they alert on very different timescales.
+
+| Layer          | What you watch                                | What it catches               | How fast it alerts |
+| -------------- | --------------------------------------------- | ----------------------------- | ------------------ |
+| Infrastructure | p50/p99 latency, error rate, OOM, queue depth | Overload, a bad deploy        | Seconds            |
+| Data quality   | Schema violations, null rate, PSI per feature | Pipeline bugs, input shift    | Minutes            |
+| Model output   | Score distribution, ECE, NaN/Inf in logits    | Bad weights, calibrator drift | Minutes            |
+| Product        | CTR, dwell, revenue, hide/report rate         | Concept drift, a bad launch   | Hours to days      |
+| Long term      | Retention, LTV, advertiser ROI                | Wrong objective, slow harm    | Weeks              |
+
+The Rules of ML are worth keeping in mind here: monitor inputs and outputs, not just the final metric; when quality stalls, suspect the data before the architecture; and the metric you actually care about is usually not measurable offline, so design the online measurement up front.
+
+Log enough to debug a regression after the fact: `request_id`, `model_version`, `feature_version`, `calibrator_version`, the top features, the per-head scores, and the final rank. Without this you cannot explain a silent 3% revenue drop a week later.
+
+## Rolling out a new model safely
+
+Do not go from an offline number straight to 100% of traffic. Each stage below has a bigger blast radius than the last, so you stop at the first one that fails.
+
+```
+offline eval  →  shadow  →  canary (1-5%)  →  A/B  →  full ramp
+                  no users       small             measured
+```
+
+### Shadow
+
+The new model scores live traffic in parallel, but users only ever see the current production model. You log the shadow scores and compare them offline.
+
+Because no user sees the output, this is where you check everything that does not need user reactions:
+
+- Serving works: features fetch, shapes line up, no NaNs, latency fits the budget at full QPS.
+- No train/serve skew: shadow features match the offline features for the same requests.
+- Scores look sane: shadow score distribution against prod, rank agreement on the same candidates, calibration once the labels arrive.
+- Capacity holds: shadow roughly doubles inference cost, so confirm the fleet can take it before canary.
+
+What shadow cannot tell you is whether the model is better, because nobody experienced its ranking. CTR, retention, and novelty effects are all invisible here. Shadow answers "does it run and score sensibly," not "is it good."
+
+```
+request → prod model   → shown to user
+        → shadow model → logged only
+```
+
+### Canary
+
+Route a small slice of real traffic (often 1 to 5%, sometimes by region) to the new model. Those users see it; everyone else stays on prod. Now you can read real user impact: the primary metric, the guardrails, latency under the real load mix, and edge cases that shadow volume might have missed.
+
+A few rules that keep canaries safe:
+
+- Route by a stable hash of the user ID so a user stays on one side across sessions.
+- Decide the rollback triggers before you launch: p99 latency over budget, error rate over threshold, revenue per user down past a bar, hide rate up.
+- Hold the guardrails. A canary that wins on CTR but loses on p99 latency or report rate does not advance.
+- Run it across at least a full day or two so you cover the daily traffic cycle.
+
+Canary and A/B blur together, but the intent differs: canary is mostly an engineering safety check (is the system stable on real traffic), while the A/B is the product decision (is it actually better, with enough samples to be sure).
+
+### Rollback
+
+Rollback is flipping traffic back to the last good model the moment a deploy goes wrong. For it to be fast, set it up before you need it:
+
+- A model registry with versioned artifacts and their lineage (which data, which code, which config), so you know exactly what "the last good one" is.
+- A routing layer that switches by config, so you change a flag instead of redeploying a binary during an incident.
+- Versioning for everything that has to agree: weights, feature definitions, the embedding index, the calibrator, the vocab. Rolling back the model but leaving a stale index is a classic way to make things worse.
+
+Triggers are either automatic (a guardrail breaks on canary) or manual (on-call sees a slice regression or an integrity issue). Sometimes the right rollback is the feature pipeline, not the model. Either way the target is minutes. If recovering means retraining, you do not have rollback, you have an outage.
+
+```
+bad:  prod v47 breaks → start a training job → ship in 2 days
+good: prod v47 breaks → point router at v46 → debug v47 offline
+```
+
+### How the stages line up
+
+| Stage        | Who is affected    | What it catches                                                    |
+| ------------ | ------------------ | ------------------------------------------------------------------ |
+| Offline eval | nobody             | Bad metrics, slice failures, miscalibration                        |
+| Shadow       | nobody             | Serving bugs, skew, latency at scale, insane scores                |
+| Canary       | a few percent      | Real metric regressions, edge cases, infra under real load         |
+| A/B          | a controlled split | Whether it is actually better, novelty decay, long-term guardrails |
+| Full ramp    | everyone           | Slow concept drift, seasonality, feedback loops                    |
+
+The short version: offline decides what earns a shadow, shadow decides what earns a canary, the canary guardrails decide what earns an A/B, the A/B decides what ships, and monitoring decides whether it stays shipped.
 
 ---
 
