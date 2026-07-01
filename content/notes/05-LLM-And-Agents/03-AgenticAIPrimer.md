@@ -2,7 +2,7 @@
 title: "AI Agents Primer"
 date: 2026-05-27
 summary: "A clear, diagram-driven revision guide to the core of Agentic AI: the agent loop, workflow vs agent design patterns, planning, memory, tool use, multi-agent systems, and the open challenges."
-tags: [Agents, Planning, Memory, Tools, ReAct, CodeAct, MCP, Multi-Agent, Design-Patterns]
+tags: [Agents, Planning, Memory, Tools, ReAct, CodeAct, MCP, Multi-Agent, Design-Patterns, Prompt-Engineering, Context-Engineering]
 ---
 
 ---
@@ -25,6 +25,8 @@ A compact recap for last-minute review.
 | ReWOO            | plan with placeholders, run tools once          | token-budget-sensitive tools |
 | ReAct            | interleave thought, action, observation         | open-ended, live feedback    |
 | Reflexion        | save failure notes, retry smarter               | trial-and-error tasks        |
+
+**Prompt vs context engineering:** prompt engineering writes one good instruction (static, single-turn); *context engineering* decides what fills the whole window on every turn (dynamic, multi-turn) and is the one that matters for agents. The window is a budget, not a bucket, so the four moves are **write** (offload it), **select** (retrieve just-in-time), **compress** (summarize/prune), and **isolate** (split across sub-agents). Curation beats accumulation.
 
 **Memory at a glance:** sensory → short-term (context window) → long-term (vector DB). Manage STM with **MemGPT** (RAM/disk paging) and **compression** (LLMLingua); power LTM with **ANN/MIPS** (HNSW, LSH, ScaNN); make recall smart with **recency + importance + relevance** scoring.
 
@@ -508,6 +510,132 @@ In short, CodeAct is ReAct where the action space is "anything you can write in 
 
 ---
 
+# Prompt & Context Engineering
+
+Everything so far assumes the model gets good input. In practice that assumption is the whole game. The single knob you actually control at run time is *what tokens sit in the context window when the model is asked to think*. Planning, memory, and tools all end up as text in that window, so the quality of an agent is capped by how well you assemble it.
+
+Two names for the craft, and they are not the same thing:
+
+- **Prompt engineering** is writing one good instruction: phrasing, examples, output format, role. It is a *static, single-turn* skill. It matters most for one-shot chat and classification.
+- **Context engineering** is deciding what fills the *entire* window on *every* turn of the loop: the system prompt, the tool definitions, retrieved documents, prior messages, memory, and the current input. It is a *dynamic, multi-turn* problem, and it is the version that matters for agents.
+
+> **The shift in one line:** prompt engineering asks "what do I say?"; context engineering asks "what does the model need to see right now, and what can I leave out?" An agent runs the loop dozens of times, so the second question is the one that decides whether it stays on track or falls apart.
+
+## The context window is a budget, not a bucket
+
+It is tempting to treat a big context window as free space and just pour everything in: full history, every tool, all the retrieved docs, the whole system prompt. That is the mistake. Attention is a finite resource, and every extra token spends it.
+
+Three things go wrong as the window fills, and it is worth naming them separately because they have different fixes:
+
+- **Lost in the middle.** Models reliably use tokens at the *start* and *end* of the window and quietly skim the *middle*. Bury the one fact that matters halfway down a 200k-token dump and the model will often miss it, even though it technically "saw" it.
+- **Context rot / distraction.** As history grows, older, stale, or irrelevant content competes with the current task. The model starts referencing things that no longer apply, repeats earlier steps, or drifts. More context can make an agent *worse*, not better.
+- **Cost and latency.** Every token in the window is re-processed on every single call (see the [Inference Engineering](10-InferenceEgineering) note for why). A bloated context makes each of the agent's many steps slower and more expensive, and the [Challenges](#challenges) section already noted steps can get up to 3x slower as context grows.
+
+```
+   the window each turn is a fixed budget you spend on:
+
+   ┌──────────────────────────────────────────────────────────┐
+   │ SYSTEM PROMPT   role, rules, style        (persistent)     │
+   ├──────────────────────────────────────────────────────────┤
+   │ TOOL DEFS       schemas the model can call (persistent)    │
+   ├──────────────────────────────────────────────────────────┤
+   │ RETRIEVED DOCS  RAG chunks, files          (per turn)      │
+   ├──────────────────────────────────────────────────────────┤
+   │ MEMORY          facts, past lessons        (per turn)      │
+   ├──────────────────────────────────────────────────────────┤
+   │ HISTORY         prior thoughts/observations (grows fast)   │
+   ├──────────────────────────────────────────────────────────┤
+   │ CURRENT INPUT   the thing to act on now                    │
+   └──────────────────────────────────────────────────────────┘
+        goal: the smallest set of high-signal tokens
+              that makes the next step likely to succeed
+```
+
+The goal is not "use the whole window." It is to find the **smallest set of high-signal tokens** that maximizes the odds of a good next step. Curation beats accumulation.
+
+## Prompt engineering: the parts that still matter
+
+Even inside an agent, the single-turn craft carries weight. The pieces I reach for most:
+
+- **Write the system prompt at the right altitude.** Too low (a giant if-this-then-that script) and it is brittle: it breaks the moment reality doesn't match a branch. Too high ("be helpful") and the model has no real guidance. Aim for the middle: clear heuristics and principles that a smart new hire could follow, not a decision tree and not a vibe.
+- **Zero-shot vs few-shot.** Start zero-shot. Add examples only when the model keeps getting the *shape* of the answer wrong. When you do add them, use a few *diverse, canonical* examples rather than a pile of near-duplicates that just eat tokens and bias the model toward one template.
+- **Pin the output format.** If your code has to parse the output, tell the model exactly what to emit (JSON schema, a fixed tag, a single word) and validate it. This is the same loop as the output guardrail: on a bad parse, feed the error back and retry.
+- **Separate instructions from data.** Keep the trusted "here is your job" text clearly delimited from untrusted content the model is merely *processing* (a fetched page, a user file). This is both a clarity win and the first line of defense against prompt injection (see [Guardrails](#guardrails)).
+- **Trigger the reasoning you want.** "Think step by step" is the cheapest CoT lever; asking for a short plan before acting nudges the model toward the ReAct pattern. These live in the prompt but pay off in the loop.
+
+## The four moves of context engineering
+
+Almost every context technique is one of four moves. This is a clean way to remember the whole space: you can **write** context out, **select** context in, **compress** what you keep, or **isolate** context across agents.
+
+```
+                        ┌─────────────────────────────┐
+                        │      CONTEXT ENGINEERING     │
+                        └───┬─────────┬────────┬───────┘
+                  write ────┘  select ┘ compress└──── isolate
+                    │           │          │            │
+             scratchpad,   RAG, tool   summarize,   sub-agents,
+             memory store  selection,  prune,       sandboxes,
+             (offload it)  memory recall trim history split state
+```
+
+| Move         | What it does                                     | Techniques (and where they're covered)                            |
+| ------------ | ------------------------------------------------ | ----------------------------------------------------------------- |
+| **Write**    | Push info *out* of the window to reuse later     | scratchpads, note-taking, long-term **Memory** (vector DB)        |
+| **Select**   | Pull *only* the relevant info *into* the window  | RAG retrieval, tool selection, memory recall, few-shot picking    |
+| **Compress** | Keep the meaning, drop the tokens                | summarization/compaction, **LLMLingua** pruning, trimming history |
+| **Isolate**  | Split context so no single window holds it all   | **multi-agent** sub-agents, sandboxed tool state, separate threads |
+
+### 1) Write — get it out of the window
+
+The window is for what you need *now*. Anything you'll need *later* should be written somewhere durable and pulled back on demand.
+
+- **Scratchpads.** Have the agent write its plan or intermediate findings to a file or a state field, not just into the running message history. It can re-read that file later without carrying every token of it through every turn in between.
+- **Structured note-taking.** On long tasks, ask the agent to periodically dump key facts ("chosen approach", "known constraints", "open questions") to a persistent note. This survives even if the raw history gets compacted away.
+- **Long-term memory.** The heavy version of "write" is the vector store, covered in full in the [Memory](#memory) section. Context engineering is the umbrella; memory is its persistence layer.
+
+### 2) Select — bring in only what's relevant
+
+The counterpart to writing is choosing what to read back. Everything you select is a token you're spending, so select tightly.
+
+- **Just-in-time retrieval.** Rather than pre-loading every document a task *might* need, let the agent fetch each one at the moment it needs it (a `read_file`, a search). This keeps the window lean and mirrors how a person works: you don't memorize the whole codebase, you open the file when you get to it.
+- **Tool selection.** Loading 50 tool schemas confuses the model as much as it informs it; overlapping tools cause it to pick wrong. Expose only the tools relevant to the current phase, and if the toolset is large, retrieve tool definitions with RAG too.
+- **Memory recall done well.** Naive similarity search over past memories drags in stale junk. The Generative-Agents recipe (recency + importance + relevance, in the [Memory](#memory) section) is the reusable pattern for selecting *good* memories, not just similar ones.
+
+### 3) Compress — same meaning, fewer tokens
+
+When history grows past what's useful, shrink it instead of carrying it whole.
+
+- **Compaction / summarization.** The workhorse. When the conversation nears a threshold, summarize the older turns into a tight recap and continue from there. The art is in *what to keep*: decisions made, constraints discovered, unresolved bugs, files touched, and drop the redundant tool chatter. A bad summary quietly throws away the one detail the next step needed, so compaction prompts are worth tuning.
+- **Token pruning.** **LLMLingua** and similar methods drop low-information tokens (filler, repetitive syntax) while keeping the meaning-rich ones, up to ~20x compression for a small quality hit. Covered in [Memory](#memory).
+- **Trim the obvious.** Old tool outputs are the usual bloat: once a file's content or a search result has been used, replace it with a one-line reference. You rarely need the raw 5,000-token payload three steps later.
+
+### 4) Isolate — don't let one window hold everything
+
+Sometimes the fix is not a smaller context but *more* contexts, each with its own clean window.
+
+- **Sub-agents.** A lead agent holds the high-level plan while workers each get a fresh, focused window for one narrow subtask, then return a condensed result. Deep research and multi-file edits work this way; this is exactly the orchestrator-workers / [multi-agent](#multi-agent-systems) pattern, viewed as a context strategy.
+- **Sandboxed state.** Let heavy artifacts (a big dataframe, an image, a long log) live in a sandbox or external store, and pass only a handle or summary through the model's context. The CodeAct pattern gets this for free: the code holds the data, the model only sees `print(...)` output.
+- **Separate threads.** Keep unrelated concerns in different conversations rather than one ever-growing thread, so an off-topic tangent never pollutes the task at hand.
+
+## A quick playbook
+
+The moves in the order I actually apply them on a misbehaving agent:
+
+| Symptom                                       | First thing to try                                            |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| Agent ignores a fact that's in the context    | Move it to the start or end; stop burying it in the middle    |
+| Agent drifts / repeats itself on long tasks   | **Compress** old history; write key state to a scratchpad     |
+| Agent picks the wrong tool                    | **Select** fewer, non-overlapping tools; sharpen descriptions |
+| Context is huge and every step is slow        | Trim stale tool outputs; retrieve just-in-time instead        |
+| One task needs more than a window can hold    | **Isolate** into sub-agents with condensed hand-offs          |
+| System prompt is a giant brittle rulebook     | Rewrite at the right altitude: heuristics, not a decision tree |
+
+> **Rule of thumb:** treat the context window like working memory for a smart colleague. You wouldn't hand them every document in the company before every question; you'd give the goal, the few things that matter, and a way to look up the rest. Do that for the model, on every turn.
+
+The catch with all of this is that context engineering is not "set once and forget." The right context for step 2 is not the right context for step 20, so the assembly logic runs *inside* the loop and has to be tuned like any other part of the system. Get it right and a modest model stays coherent over long tasks; get it wrong and even a frontier model with a million-token window will lose the plot.
+
+---
+
 # Memory
 
 How well an agent works over long stretches of time depends almost entirely on its memory. We can map the memory in an agent onto the memory in human thinking.
@@ -906,6 +1034,15 @@ When several agents collaborate, each may only have access to its own user's pri
 - [The Rise of Agentic AI: A Technical Deep Dive](https://medium.com/@brian-curry-research/the-rise-of-agentic-ai-a-technical-deep-dive-into-autonomous-ai-systems-in-2025-c2a9355252dd)
 - [Awesome-AI-Agents](https://github.com/Jenqyang/Awesome-AI-Agents)
 - [awesome-llm-powered-agent](https://github.com/hyp1231/awesome-llm-powered-agent)
+
+## Prompt and Context Engineering
+
+- [Effective Context Engineering for AI Agents (Anthropic)](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Context Engineering for Agents (LangChain)](https://blog.langchain.com/context-engineering-for-agents/)
+- [Prompt Engineering (Lil'Log)](https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/)
+- [Prompt Engineering Guide (DAIR.AI)](https://www.promptingguide.ai/)
+- [Lost in the Middle: How Language Models Use Long Contexts (arXiv)](https://arxiv.org/abs/2307.03172)
+- [LLMLingua: Compressing Prompts for Accelerated Inference (arXiv)](https://arxiv.org/abs/2310.05736)
 
 ## Planning and Reasoning
 
