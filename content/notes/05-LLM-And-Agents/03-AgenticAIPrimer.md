@@ -578,14 +578,14 @@ Almost every context technique is one of four moves. This is a clean way to reme
              (offload it)  memory recall trim history split state
 ```
 
-| Move         | What it does                                     | Techniques (and where they're covered)                            |
-| ------------ | ------------------------------------------------ | ----------------------------------------------------------------- |
-| **Write**    | Push info *out* of the window to reuse later     | scratchpads, note-taking, long-term **Memory** (vector DB)        |
-| **Select**   | Pull *only* the relevant info *into* the window  | RAG retrieval, tool selection, memory recall, few-shot picking    |
-| **Compress** | Keep the meaning, drop the tokens                | summarization/compaction, **LLMLingua** pruning, trimming history |
-| **Isolate**  | Split context so no single window holds it all   | **multi-agent** sub-agents, sandboxed tool state, separate threads |
+| Move         | What it does                                    | Techniques (and where they're covered)                             |
+| ------------ | ----------------------------------------------- | ------------------------------------------------------------------ |
+| **Write**    | Push info *out* of the window to reuse later    | scratchpads, note-taking, long-term **Memory** (vector DB)         |
+| **Select**   | Pull *only* the relevant info *into* the window | RAG retrieval, tool selection, memory recall, few-shot picking     |
+| **Compress** | Keep the meaning, drop the tokens               | summarization/compaction, **LLMLingua** pruning, trimming history  |
+| **Isolate**  | Split context so no single window holds it all  | **multi-agent** sub-agents, sandboxed tool state, separate threads |
 
-### 1) Write — get it out of the window
+### 1) Write : get it out of the window
 
 The window is for what you need *now*. Anything you'll need *later* should be written somewhere durable and pulled back on demand.
 
@@ -593,7 +593,7 @@ The window is for what you need *now*. Anything you'll need *later* should be wr
 - **Structured note-taking.** On long tasks, ask the agent to periodically dump key facts ("chosen approach", "known constraints", "open questions") to a persistent note. This survives even if the raw history gets compacted away.
 - **Long-term memory.** The heavy version of "write" is the vector store, covered in full in the [Memory](#memory) section. Context engineering is the umbrella; memory is its persistence layer.
 
-### 2) Select — bring in only what's relevant
+### 2) Select:  bring in only what's relevant
 
 The counterpart to writing is choosing what to read back. Everything you select is a token you're spending, so select tightly.
 
@@ -601,7 +601,7 @@ The counterpart to writing is choosing what to read back. Everything you select 
 - **Tool selection.** Loading 50 tool schemas confuses the model as much as it informs it; overlapping tools cause it to pick wrong. Expose only the tools relevant to the current phase, and if the toolset is large, retrieve tool definitions with RAG too.
 - **Memory recall done well.** Naive similarity search over past memories drags in stale junk. The Generative-Agents recipe (recency + importance + relevance, in the [Memory](#memory) section) is the reusable pattern for selecting *good* memories, not just similar ones.
 
-### 3) Compress — same meaning, fewer tokens
+### 3) Compress : same meaning, fewer tokens
 
 When history grows past what's useful, shrink it instead of carrying it whole.
 
@@ -609,7 +609,7 @@ When history grows past what's useful, shrink it instead of carrying it whole.
 - **Token pruning.** **LLMLingua** and similar methods drop low-information tokens (filler, repetitive syntax) while keeping the meaning-rich ones, up to ~20x compression for a small quality hit. Covered in [Memory](#memory).
 - **Trim the obvious.** Old tool outputs are the usual bloat: once a file's content or a search result has been used, replace it with a one-line reference. You rarely need the raw 5,000-token payload three steps later.
 
-### 4) Isolate — don't let one window hold everything
+### 4) Isolate : don't let one window hold everything
 
 Sometimes the fix is not a smaller context but *more* contexts, each with its own clean window.
 
@@ -621,14 +621,14 @@ Sometimes the fix is not a smaller context but *more* contexts, each with its ow
 
 The moves in the order I actually apply them on a misbehaving agent:
 
-| Symptom                                       | First thing to try                                            |
-| --------------------------------------------- | ------------------------------------------------------------- |
-| Agent ignores a fact that's in the context    | Move it to the start or end; stop burying it in the middle    |
-| Agent drifts / repeats itself on long tasks   | **Compress** old history; write key state to a scratchpad     |
-| Agent picks the wrong tool                    | **Select** fewer, non-overlapping tools; sharpen descriptions |
-| Context is huge and every step is slow        | Trim stale tool outputs; retrieve just-in-time instead        |
-| One task needs more than a window can hold    | **Isolate** into sub-agents with condensed hand-offs          |
-| System prompt is a giant brittle rulebook     | Rewrite at the right altitude: heuristics, not a decision tree |
+| Symptom                                     | First thing to try                                             |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| Agent ignores a fact that's in the context  | Move it to the start or end; stop burying it in the middle     |
+| Agent drifts / repeats itself on long tasks | **Compress** old history; write key state to a scratchpad      |
+| Agent picks the wrong tool                  | **Select** fewer, non-overlapping tools; sharpen descriptions  |
+| Context is huge and every step is slow      | Trim stale tool outputs; retrieve just-in-time instead         |
+| One task needs more than a window can hold  | **Isolate** into sub-agents with condensed hand-offs           |
+| System prompt is a giant brittle rulebook   | Rewrite at the right altitude: heuristics, not a decision tree |
 
 > **Rule of thumb:** treat the context window like working memory for a smart colleague. You wouldn't hand them every document in the company before every question; you'd give the goal, the few things that matter, and a way to look up the rest. Do that for the model, on every turn.
 
