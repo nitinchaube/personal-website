@@ -1103,6 +1103,262 @@ class Solution:
 
 ---
 
+## Graph Concepts (Fundamentals)
+
+A **graph** `G = (V, E)` is a set of **vertices** (nodes) `V` connected by **edges** `E`. Almost every "grid", "network", "dependency", "connection", or "path" problem is a graph in disguise.
+
+### Terminology Cheat Sheet
+
+| Term                   | Meaning                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| Directed vs Undirected | Edges have a direction (`u → v`) vs both ways (`u — v`)                           |
+| Weighted vs Unweighted | Edges carry a cost/weight vs all edges equal                                      |
+| Degree                 | Number of edges touching a node (in-degree / out-degree for directed)             |
+| Path                   | Sequence of vertices connected by edges                                           |
+| Cycle                  | A path that starts and ends at the same vertex                                    |
+| DAG                    | Directed Acyclic Graph — directed graph with no cycles (enables topological sort) |
+| Connected Component    | Maximal set of mutually reachable vertices (undirected)                           |
+| SCC                    | Strongly Connected Component — mutually reachable in a *directed* graph           |
+| Tree                   | Connected undirected graph with `V` nodes and exactly `V-1` edges (no cycles)     |
+| Bipartite              | Vertices can be split into two sets with no edge inside a set (2-colorable)       |
+| Sparse vs Dense        | `E ≈ V` vs `E ≈ V²` — decides list vs matrix representation                       |
+
+### Graph Representations
+
+```python
+from collections import defaultdict
+
+# 1. Adjacency List (BEST default: O(V + E) space, fast neighbor iteration)
+adj = defaultdict(list)
+for u, v in edges:
+    adj[u].append(v)
+    adj[v].append(u)          # omit this line for a directed graph
+
+# 2. Weighted Adjacency List
+adj_w = defaultdict(list)
+for u, v, w in edges:
+    adj_w[u].append((v, w))
+
+# 3. Adjacency Matrix (O(V²) space, O(1) edge lookup — good for dense graphs)
+matrix = [[0] * n for _ in range(n)]
+for u, v in edges:
+    matrix[u][v] = 1
+    matrix[v][u] = 1          # omit for directed
+
+# 4. Edge List (just the raw list — used by Kruskal / Bellman-Ford)
+edge_list = [(u, v, w) for u, v, w in edges]
+```
+
+**When to pick which:** Use an **adjacency list** almost always. Use a **matrix** only when the graph is dense or you need constant-time "is there an edge?" checks. Use an **edge list** for Union-Find / Kruskal / Bellman-Ford.
+
+### Grids as Graphs
+
+A 2D grid is an implicit graph where each cell `(r, c)` is a node connected to its neighbors. This powers island/flood-fill/shortest-path-on-grid problems.
+
+```python
+# 4-directional neighbors (add diagonals for 8-directional)
+DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+def neighbors(r, c, rows, cols):
+    for dr, dc in DIRS:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < rows and 0 <= nc < cols:
+            yield nr, nc
+```
+
+### Traversal: DFS vs BFS
+
+|                | DFS                                                    | BFS                                   |
+| -------------- | ------------------------------------------------------ | ------------------------------------- |
+| Data structure | Stack / recursion                                      | Queue (`deque`)                       |
+| Explores       | As deep as possible first                              | Level by level                        |
+| Shortest path? | No (unweighted)                                        | **Yes** (unweighted graphs)           |
+| Typical use    | Connectivity, cycle detection, topo sort, backtracking | Shortest path, level-order, min steps |
+| Complexity     | `O(V + E)`                                             | `O(V + E)`                            |
+
+> **Golden rule:** Always keep a `visited` set. Without it you can loop forever on cyclic graphs and re-process nodes exponentially.
+
+### Topological Sort (only for DAGs)
+
+Orders vertices so every edge `u → v` has `u` before `v`. Two ways: **Kahn's algorithm** (BFS with in-degrees) or **DFS post-order**. If a cycle exists, no valid ordering exists, this is how you detect cycles in a directed graph.
+
+```python
+# Kahn's Algorithm (BFS) — also detects cycles
+def topological_sort(num_nodes, edges):
+    adj = defaultdict(list)
+    indegree = [0] * num_nodes
+    for u, v in edges:            # edge u -> v
+        adj[u].append(v)
+        indegree[v] += 1
+
+    queue = deque(i for i in range(num_nodes) if indegree[i] == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nxt in adj[node]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+
+    return order if len(order) == num_nodes else []   # [] => cycle exists
+```
+
+### Cycle Detection
+
+```python
+# Undirected graph — track parent to ignore the edge you came from
+def has_cycle_undirected(n, adj):
+    visited = set()
+    def dfs(node, parent):
+        visited.add(node)
+        for nxt in adj[node]:
+            if nxt not in visited:
+                if dfs(nxt, node):
+                    return True
+            elif nxt != parent:      # visited & not parent => back edge => cycle
+                return True
+        return False
+    return any(node not in visited and dfs(node, -1) for node in range(n))
+
+# Directed graph — three colors: WHITE(unseen), GRAY(in stack), BLACK(done)
+def has_cycle_directed(n, adj):
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = [WHITE] * n
+    def dfs(node):
+        color[node] = GRAY
+        for nxt in adj[node]:
+            if color[nxt] == GRAY:   # back edge to a node on the current path
+                return True
+            if color[nxt] == WHITE and dfs(nxt):
+                return True
+        color[node] = BLACK
+        return False
+    return any(color[node] == WHITE and dfs(node) for node in range(n))
+```
+
+### Bipartite Check (2-Coloring)
+
+Try to color the graph with two colors so no edge joins same-colored nodes. Impossible ⟺ the graph has an odd-length cycle.
+
+```python
+def is_bipartite(n, adj):
+    color = [-1] * n
+    for start in range(n):
+        if color[start] != -1:
+            continue
+        color[start] = 0
+        queue = deque([start])
+        while queue:
+            node = queue.popleft()
+            for nxt in adj[node]:
+                if color[nxt] == -1:
+                    color[nxt] = 1 - color[node]
+                    queue.append(nxt)
+                elif color[nxt] == color[node]:
+                    return False
+    return True
+```
+
+### Shortest Path Algorithms
+
+| Algorithm           | Graph type             | Handles negative?  | Complexity   | Use when                                |
+| ------------------- | ---------------------- | ------------------ | ------------ | --------------------------------------- |
+| **BFS**             | Unweighted             | —                  | `O(V + E)`   | All edge weights equal                  |
+| **0-1 BFS** (deque) | Weights 0 or 1         | —                  | `O(V + E)`   | Edges cost 0 or 1                       |
+| **Dijkstra**        | Weighted, non-negative | No                 | `O(E log V)` | Single-source, positive weights         |
+| **Bellman-Ford**    | Weighted               | **Yes**            | `O(V · E)`   | Negative edges / detect negative cycles |
+| **Floyd-Warshall**  | Weighted               | Yes (no neg cycle) | `O(V³)`      | All-pairs shortest paths, small `V`     |
+
+```python
+# Dijkstra — single source shortest path (non-negative weights)
+import heapq
+def dijkstra(n, adj_w, src):
+    dist = [float("inf")] * n
+    dist[src] = 0
+    pq = [(0, src)]                       # (distance, node)
+    while pq:
+        d, node = heapq.heappop(pq)
+        if d > dist[node]:                # stale entry, skip
+            continue
+        for nxt, w in adj_w[node]:
+            if dist[node] + w < dist[nxt]:
+                dist[nxt] = dist[node] + w
+                heapq.heappush(pq, (dist[nxt], nxt))
+    return dist
+
+# Bellman-Ford — handles negative edges, detects negative cycles
+def bellman_ford(n, edges, src):
+    dist = [float("inf")] * n
+    dist[src] = 0
+    for _ in range(n - 1):                # relax all edges V-1 times
+        for u, v, w in edges:
+            if dist[u] != float("inf") and dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+    for u, v, w in edges:                 # one more pass => negative cycle
+        if dist[u] != float("inf") and dist[u] + w < dist[v]:
+            return None
+    return dist
+
+# Floyd-Warshall — all-pairs shortest paths
+def floyd_warshall(n, matrix):            # matrix[i][j] = weight or inf
+    dist = [row[:] for row in matrix]
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if dist[i][k] + dist[k][j] < dist[i][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
+    return dist
+```
+
+### Minimum Spanning Tree (MST)
+
+Cheapest set of edges connecting all vertices with no cycle (`V-1` edges). Two classic algorithms:
+
+- **Kruskal** : sort edges, greedily add the smallest edge that doesn't form a cycle (uses Union-Find). Great for sparse graphs.
+- **Prim** : grow the tree one node at a time, always adding the cheapest edge leaving the tree (uses a min-heap). Great for dense graphs.
+
+```python
+# Kruskal's MST (needs the UnionFind class from the section below)
+def kruskal(n, edges):                    # edges: (weight, u, v)
+    uf = UnionFind(n)
+    edges.sort()
+    total, used = 0, 0
+    for w, u, v in edges:
+        if uf.union(u, v):                # union returns False if same set
+            total += w
+            used += 1
+            if used == n - 1:
+                break
+    return total
+
+# Prim's MST
+def prim(n, adj_w):                        # adj_w[node] = [(neighbor, weight)]
+    visited = [False] * n
+    pq = [(0, 0)]                          # (weight, node), start at node 0
+    total = 0
+    while pq:
+        w, node = heapq.heappop(pq)
+        if visited[node]:
+            continue
+        visited[node] = True
+        total += w
+        for nxt, wt in adj_w[node]:
+            if not visited[nxt]:
+                heapq.heappush(pq, (wt, nxt))
+    return total
+```
+
+### How to Recognize a Graph Problem
+
+- Words like *network, connection, dependency, prerequisite, route, path, friends, islands, regions, transform-one-word-into-another*.
+- You're asked for **reachability**, **shortest/cheapest path**, **cycle**, **ordering**, or **grouping/components**.
+- A grid/matrix where you move between adjacent cells.
+
+**Pattern → tool mapping:** shortest steps (unweighted) → **BFS**; cheapest path (weighted +) → **Dijkstra**; ordering with dependencies → **Topological sort**; grouping / connectivity / "redundant edge" → **Union-Find**; connect-everything-cheaply → **MST**; can-2-color / conflict-free grouping → **Bipartite check**.
+
+---
+
 ## Graph (BFS / DFS)
 
 ```python
@@ -1255,6 +1511,75 @@ class Solution:
                     result.append(n)
 
         return [] if numCourses != visited else result
+```
+
+### Problem LC 994: Rotting Oranges ([https://leetcode.com/problems/rotting-oranges/](https://leetcode.com/problems/rotting-oranges/))
+
+```python
+class Solution:
+    def orangesRotting(self, grid: List[List[int]]) -> int:
+
+        # m, n = len(grid), len(grid[0])
+        # time_grid = [[float('inf')] * n for _ in range(m)]
+        # def dfs(i,j, time):
+        #     if i<0 or i>=m or j<0 or j>=n or grid[i][j] == 0:
+        #         return
+        #     if time >= time_grid[i][j]:
+        #         return
+
+        #     time_grid[i][j] = time
+        #     dfs(i+1, j, time+1)
+        #     dfs(i-1, j, time+1)
+        #     dfs(i, j+1, time+1)
+        #     dfs(i, j-1, time+1)
+        
+        # for i in range(m):
+        #     for j in range(n):
+        #         if grid[i][j] == 2:
+        #             dfs(i, j, 0)
+        
+        # max_minutes = 0
+        # for i in range(m):
+        #     for j in range(n):
+        #         if grid[i][j] == 1:
+        #             if time_grid[i][j] == float("inf"):
+        #                 return -1
+        #             max_minutes = max(max_minutes, time_grid[i][j])
+
+        # return max_minutes
+
+        # Using QUEUE
+        q = deque()
+        m, n = len(grid), len(grid[0])
+        if not grid:
+            return -1
+        
+        fresh_count = 0
+        for i in range(m):
+            for j in range(n):
+                if grid[i][j] == 2:
+                    q.append((i,j))
+                if grid[i][j] == 1:
+                    fresh_count += 1
+        
+        if fresh_count == 0:
+            return 0
+        
+        minutes = 0
+        dir = [(1,0), (0,1), (-1,0), (0,-1)]
+        
+        while q and fresh_count>0:
+            minutes += 1
+            for i in range(len(q)):
+                r, c = q.popleft()
+                for dr, dc in dir:
+                    nr, nc = dr+r, dc+c
+                    if 0<=nr<m and 0<=nc<n and grid[nr][nc]==1:
+                        grid[nr][nc] = 2
+                        fresh_count -= 1
+                        q.append((nr,nc))
+        
+        return minutes if fresh_count ==0 else -1
 ```
 
 ---
