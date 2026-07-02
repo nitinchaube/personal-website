@@ -5,7 +5,6 @@ summary: "Short, easy to digest summaries of papers I've read on LLMs and agents
 tags: [LLM, Agents, AI]
 ---
 
-
 # Agent Memory
 
 Papers about how agents remember things across long conversations, manage limited context, and build up knowledge over time.
@@ -103,3 +102,67 @@ A few things worth calling out:
 - Paging happens on "memory pressure". When `messages` gets too big, the oldest ones are flushed to `recall_db` and replaced with a summary. MemGPT even injects a *"warning: context is 70% full"* system message, which is the model's cue to call `core_memory_append` or `archival_memory_insert` and save anything important before it scrolls off. That's the self-managing part.
 
 So the whole trick is: describe memory as tools, let the LLM call them, intercept and execute, feed results back, loop. No retraining, no bigger window.
+
+---
+
+# Reasoning & Verifiers
+
+Papers on getting LLMs to reason reliably, and on the separate models that *check* that reasoning instead of trusting the final answer.
+
+## Let's Verify Step by Step
+
+Published: 2023-05-31 | [https://arxiv.org/abs/2305.20050](https://arxiv.org/abs/2305.20050)
+
+When you ask an LLM to solve a hard math problem, it writes out a chain of reasoning and then gives an answer. The annoying thing is that the model can get the **right answer for the wrong reasons**, or make one silly slip in the middle of otherwise perfect work. If you want to actually *trust* these solutions, you need a second model, a **verifier**, whose only job is to look at a solution and score how likely it is to be correct. Then you can sample many solutions from the main model and let the verifier pick the best one. This paper is about how you should *train* that verifier.
+
+There are two ways to give the verifier feedback, and the whole paper is a head-to-head between them:
+
+- **Outcome supervision (ORM, Outcome-supervised Reward Model).** You only look at the final answer. If the final number is right, the whole solution is labeled "good"; if it's wrong, "bad". Cheap, because you just need the answer key, no human reads the steps.
+- **Process supervision (PRM, Process-supervised Reward Model).** A human reads the solution **one step at a time** and labels each step as *correct*, *incorrect*, or *neutral*. The feedback is fine-grained: it points at exactly which line the reasoning went wrong.
+
+```
+                        Problem + model's solution
+
+  OUTCOME (ORM)                          PROCESS (PRM)
+  ─────────────                          ─────────────
+  Step 1 ..........                      Step 1 ..........  ✓ correct
+  Step 2 ..........                      Step 2 ..........  ✓ correct
+  Step 3 .......... (has a bug)          Step 3 .......... ✗ incorrect  ← caught here
+  Step 4 ..........                      Step 4 ..........  – neutral
+  Final answer: 42                       Final answer: 42
+        │                                      │
+        ▼                                      ▼
+  one label for the whole thing          one label PER step
+  "answer correct → all good"            "step 3 is where it broke"
+```
+
+**Why outcome supervision is sneaky-bad:** Imagine step 3 has an error but two errors cancel out and the final answer still comes out to 42. Outcome supervision sees "answer correct" and happily labels the *entire* solution, including the broken step 3, as good. So the ORM learns from mislabeled reasoning. Process supervision doesn't have this problem, it rewards the model for reasoning that is *actually* sound, not reasoning that merely stumbles into the right answer.
+
+**The headline result:** the process-supervised verifier wins, and not by a little. On the MATH dataset, when you sample 1,920 solutions per problem and use the verifier to pick the best one, the PRM solves **78.2%** of problems versus the ORM's lower rate. Process supervision is both **more reliable** *and* more aligned, you're rewarding the behavior you actually want (correct thinking) rather than a proxy for it (correct final answer).
+
+### How the verifier scores a whole solution
+
+The PRM outputs a correctness probability at *every step*. To turn those per-step scores into one number for the whole solution, they take the **product** of the step probabilities, which is the same as asking "what's the probability that *every single step* is correct?".
+
+```python
+# prm(step) -> probability in [0, 1] that this step is correct,
+# given the problem and all steps before it.
+
+def score_solution(problem, steps, prm):
+    p_correct = 1.0
+    for i, step in enumerate(steps):
+        prefix = steps[:i]                      # everything before this step
+        p_correct *= prm.step_prob(problem, prefix, step)
+    return p_correct                            # score for the ENTIRE solution
+
+def best_of_n(problem, generator, prm, n=1920):
+    # sample many candidate solutions, keep the one the verifier trusts most
+    candidates = [generator.sample(problem) for _ in range(n)]
+    return max(candidates, key=lambda s: score_solution(problem, s.steps, prm))
+```
+
+One nice property: because a single wrong step drags the product toward zero, the PRM is naturally harsh on solutions with any broken step, exactly what you want.
+
+Human step-by-step labeling is expensive, so they don't label random solutions, they label the ones that are most **informative**. Concretely: for each problem, generate many solutions, and preferentially send to humans the *convincing wrong-answer* solutions, ones the current model rates highly but that actually reach the wrong final answer. Those are exactly the cases where the model is confidently fooling itself, so a human label there teaches the most per dollar. This active-learning trick made the data collection several times more label-efficient.
+
+###
