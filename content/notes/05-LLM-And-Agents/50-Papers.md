@@ -165,4 +165,60 @@ One nice property: because a single wrong step drags the product toward zero, th
 
 Human step-by-step labeling is expensive, so they don't label random solutions, they label the ones that are most **informative**. Concretely: for each problem, generate many solutions, and preferentially send to humans the *convincing wrong-answer* solutions, ones the current model rates highly but that actually reach the wrong final answer. Those are exactly the cases where the model is confidently fooling itself, so a human label there teaches the most per dollar. This active-learning trick made the data collection several times more label-efficient.
 
-###
+---
+
+# Self-Improvement & Reflection
+
+Papers on agents that learn from their own mistakes *within* a task, retrying and getting better without any weight updates.
+
+## Reflexion: Language Agents with Verbal Reinforcement Learning
+
+Published: 2023-03-20 | [https://arxiv.org/abs/2303.11366](https://arxiv.org/abs/2303.11366)
+
+Normally when you want an agent to get better at a task, you fine-tune it: run it, compute a reward, backprop, update the weights. That's slow and expensive, and you can't do it on the fly. Reflexion asks: what if the agent improves by **talking to itself** instead of by updating weights? The agent tries a task, fails, writes a short note to itself about *why* it failed, and keeps that note around so its next attempt is smarter. The "learning" happens entirely in natural language in the context window, which is why the paper calls it **verbal reinforcement learning**.
+
+The system is three cooperating pieces:
+
+- **Actor** : The LLM that actually does the task (picks actions, writes code, answers the question). Usually a ReAct- or CoT-style agent.
+- **Evaluator** : Decides whether the attempt succeeded. This can be a hard signal (unit tests passed / task completed) or the model grading itself.
+- **Self-Reflection** : The key part. Given the failed trajectory *and* the evaluator's verdict, this LLM writes a short verbal lesson: "I assumed the key was in the drawer, but I never actually opened it. Next time, open containers before searching them."
+
+Those reflections get stored in **memory** and pasted into the prompt on the next attempt, so the agent literally reads its own past lessons before trying again.
+
+```
+        ┌──────────────────────────────────────────────┐
+        │                                                │
+        ▼                                                │
+   ┌─────────┐   trajectory   ┌───────────┐   verdict    │
+   │  ACTOR  │───────────────▶│ EVALUATOR │──────────┐   │
+   │ (tries) │                │ (pass /   │          │   │
+   └─────────┘                │  fail?)   │          ▼   │
+        ▲                     └───────────┘   ┌──────────────┐
+        │                                     │ SELF-REFLECT │
+        │  reads past lessons                 │  "why did I  │
+   ┌──────────┐   append reflection           │   fail?"     │
+   │  MEMORY  │◀──────────────────────────────└──────────────┘
+   │(lessons) │
+   └──────────┘        loop until success or max attempts
+```
+
+Here's the whole loop in pseudo code:
+
+```python
+def reflexion(task, actor, evaluator, reflect, max_trials=5):
+    memory = []                                  # long-term: verbal lessons
+    for trial in range(max_trials):
+        # actor conditions on every lesson learned so far
+        trajectory = actor.run(task, lessons=memory)
+        passed, feedback = evaluator.check(trajectory)
+        if passed:
+            return trajectory                    # solved it
+        # turn this failure into a natural-language lesson and remember it
+        lesson = reflect(task, trajectory, feedback)
+        memory.append(lesson)                    # available on the next trial
+    return trajectory                            # best effort after N tries
+```
+
+The clever bit is that `memory` carries *across attempts*. Trial 1 fails and produces a lesson; trial 2 reads that lesson and avoids the same mistake, maybe failing in a new way and adding a second lesson; and so on. It's trial-and-error, but the "error signal" is a paragraph of self-critique instead of a gradient.
+
+It works well precisely where a plain agent gets stuck in a loop repeating the same mistake. Reflexion showed big gains across three very different kinds of tasks, decision-making (AlfWorld), reasoning (HotPotQA), and coding (it hit **91% pass@1 on HumanEval**, beating the base model by a wide margin), all without touching the model's weights.
