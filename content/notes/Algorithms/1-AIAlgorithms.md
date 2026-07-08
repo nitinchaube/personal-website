@@ -1009,6 +1009,10 @@ print(bpe_train(["low", "lower", "lowest"], num_merges=3))   # learns ('l','o'),
 
 ---
 
+> **Deeper dive:** for the full math and algorithm treatment of quantization — GPTQ, AWQ, SmoothQuant, GGUF k-quants, QAT/STE, NF4, BitNet — see the standalone [Quantization primer](/notes/Primers/Quantization).
+
+---
+
 # 7. Representation Learning & Embeddings
 
 Google leans heavily on retrieval, recommendations and embeddings — these come up constantly.
