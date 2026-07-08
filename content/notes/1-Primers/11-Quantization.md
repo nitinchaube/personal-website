@@ -11,11 +11,13 @@ summary: >-
 tags: [Quantization, LLM, Inference, PTQ, QAT, GPTQ, AWQ, GGUF, NF4, FP8, KV-Cache, GPU, MLOps]
 ---
 
-Quantization is the trick of storing a model's numbers in fewer bits than it was trained in, and doing it carefully enough that the model still works. That is the whole idea in one sentence. Everything else in this note is about the word *carefully*, because a naive "just round everything to 4-bit" wrecks a large language model, and the reason it wrecks it, and the dozen different ways people have found to stop it from wrecking it, is where an entire subfield lives.
+Quantization is storing a model's numbers in fewer bits than it was trained in, and doing it carefully enough that the model still works. That is the whole idea in one sentence.
 
-The thing that took me a while to internalize is that quantization is not really about compression. Yes, a 70B model in FP16 is 140GB and the same model at 4-bit is around 35GB, and that alone is why it fits on your GPU now. But the deeper reason we do it is speed. Decode (generating one token at a time) is memory-bandwidth-bound, i.e. the GPU spends most of its time reading weights out of memory and almost no time doing math. If you make each weight a quarter of the size, you read a quarter of the bytes per token, and decode gets roughly four times faster more or less for free. I covered that memory-wall argument in detail in [Inference Engineering](/notes/LLM-And-Agents/InferenceEgineering), so I will not re-derive it here. This note is the standalone reference on quantization itself: the math, the algorithms, and the actual tools.
+Everything else in this note is about the word *carefully*. Naively rounding every weight to 4-bit wrecks a large language model. The reason it wrecks it, and the dozen tricks people invented to stop that, is where a whole subfield lives.
 
-I have tried to make this complete rather than short. If you read it top to bottom you should not have to open another tab.
+The thing that took me a while to internalize: quantization is not really about saving disk space. Yes, a 70B model is 140GB in FP16 and about 35GB at 4-bit, and that is why it suddenly fits on your GPU. But the real prize is **speed**. Generating one token at a time (decode) is bottlenecked on memory bandwidth, i.e. the GPU spends almost all its time reading weights out of memory and barely any time doing math. Make each weight a quarter of the size and you read a quarter of the bytes per token, so decode gets roughly 4x faster almost for free. I unpack that memory-wall argument in [Inference Engineering](/notes/LLM-And-Agents/InferenceEgineering), so I will not repeat it here.
+
+This note is the standalone reference on quantization itself: the math, the algorithms, and the actual tools. I have kept it complete but tried to explain each piece in plain terms first, then show the math.
 
 ---
 
@@ -23,21 +25,35 @@ I have tried to make this complete rather than short. If you read it top to bott
 
 ## Affine (uniform) quantization
 
-You have a tensor of real-valued weights $W$ and you want to store each entry in $b$ bits. A $b$-bit integer gives you $2^b$ distinct slots, and quantization is the function that decides which slot each real number lands in, plus how you turn a slot back into an approximate real number.
+Think of it like rounding prices. If you only had whole dollars to work with, you would map every real price onto the nearest dollar, and accept a few cents of error. Quantization does the same thing, except the "dollars" are the $2^b$ integer values a $b$-bit number can hold, and you get to choose how wide one step is.
 
-Pick a float range $[\alpha, \beta]$ that covers the values you care about, and an integer range $[q_{min}, q_{max}]$ that your bit-width supports (so $[0, 255]$ for unsigned INT8, or $[-128, 127]$ for signed INT8). The **scale** $S$ and **zero-point** $Z$ are:
+You have a tensor of real weights $W$. Pick a float range $[\alpha, \beta]$ that covers the values you care about, and the integer range $[q_{min}, q_{max}]$ your bit-width allows (so $[0, 255]$ for unsigned INT8). Two numbers define the whole mapping, the **scale** $S$ (how many real units one integer step is worth) and the **zero-point** $Z$ (which integer stands for real zero):
 
-$$  
-S = \frac{\beta - \alpha}{q_{max} - q_{min}}, \qquad Z = \text{round}\left(q_{min} - \frac{\alpha}{S}\right)  
+$$
+S = \frac{\beta - \alpha}{q_{max} - q_{min}}, \qquad Z = \text{round}\left(q_{min} - \frac{\alpha}{S}\right)
 $$
 
-$S$ answers "how many real units is one integer step," and $Z$ answers "which integer represents real zero." You need $Z$ because $\alpha$ and $\beta$ are usually not symmetric around zero, so you need an offset to line the grid up with the float range. Quantizing a value and then reconstructing it back is:
+To quantize a value you divide by the step, round, and shift by $Z$. To get an approximate value back you undo those:
 
-$$  
-W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z, q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)  
+$$
+W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z,\; q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)
 $$
 
-$\hat W$ is the number the model actually computes with at inference time. It is never exactly $W$, and the entire game is choosing $\alpha, \beta$ (which fix $S, Z$) so that $\hat W$ stays close to $W$ in the places that matter to the model's output. Every algorithm later in this note is a different answer to "where do the places that matter live, and how do I protect them."
+**A worked example.** Say your weights run from $\alpha = -0.8$ to $\beta = 1.2$, and you want unsigned INT8 ($q_{min}=0$, $q_{max}=255$).
+
+$$
+S = \frac{1.2 - (-0.8)}{255 - 0} = \frac{2.0}{255} \approx 0.00784, \qquad Z = \text{round}\left(0 - \frac{-0.8}{0.00784}\right) = 102
+$$
+
+Now quantize the weight $w = 0.5$:
+
+$$
+W_q = \text{round}\!\left(\frac{0.5}{0.00784}\right) + 102 = 64 + 102 = 166
+$$
+
+And read it back: $\hat W = 0.00784 \times (166 - 102) = 0.502$. So $0.5$ is stored as the single byte $166$ and comes back as $0.502$. The error, about $0.002$, is the price of the byte.
+
+That number $\hat W$ is what the model actually computes with. It is never exactly $W$, and the whole game is choosing the range so that $\hat W$ stays close to $W$ *where it matters to the output*. Every algorithm later in this note is a different answer to "which weights matter, and how do I protect them from rounding error."
 
 ```
  real line:   α ─────────────────────────────── β
@@ -52,94 +68,97 @@ $\hat W$ is the number the model actually computes with at inference time. It is
 
 ## Symmetric vs asymmetric
 
-If you force $Z = 0$ the scheme is **symmetric**: the float range becomes $[-\alpha_{max}, \alpha_{max}]$ and the formula collapses to a plain scale-and-round with no offset:
+The example above is **asymmetric**: it uses a zero-point $Z$ because the range was lopsided ($-0.8$ to $1.2$ is not centered on zero).
 
-$$  
-W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right), -2^{b-1}, 2^{b-1}-1\right), \qquad S = \frac{\alpha_{max}}{2^{b-1}-1}  
+If you instead force $Z = 0$ you get **symmetric** quantization. You center the range on zero, $[-\alpha_{max}, \alpha_{max}]$, and drop the offset entirely:
+
+$$
+W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right), -2^{b-1}, 2^{b-1}-1\right), \qquad S = \frac{\alpha_{max}}{2^{b-1}-1}
 $$
 
-The payoff is that there is no zero-point add or subtract at inference, so the integer matmul is simpler and a bit faster. **Asymmetric** keeps $Z \neq 0$ and can represent lopsided distributions exactly, at the cost of carrying that offset around.
+Redo the example symmetrically: max absolute value $1.2$, signed INT8 range $[-127, 127]$, so $S = 1.2/127 \approx 0.00945$. Then $0.5$ maps to $\text{round}(0.5/0.00945) = 53$, and reads back as $53 \times 0.00945 = 0.501$. No zero-point needed. That missing $Z$ means one less add at inference, so the integer matmul is a touch faster.
 
-> **When do you actually need $Z$?** Weight distributions in a trained network are close to zero-centered, so a symmetric range wastes almost nothing, and weights are usually quantized symmetrically. Activations after a ReLU or GELU are one-sided (all non-negative), and if you force a symmetric range around zero you throw away half your integer slots on values that never occur. That is why activations often have to be asymmetric.
+> **When do you actually need $Z$?** Trained weights sit roughly centered on zero, so a symmetric range wastes almost nothing, and weights are usually quantized symmetrically. Activations after a ReLU or GELU are one-sided (never negative). Force a symmetric range on those and you throw away half your integer slots on negative values that never occur. That is why activations often have to be asymmetric.
 
 ## What exactly are we quantizing?
 
-This is the part people gloss over and then get confused by. There are three separate things you can quantize, and they have completely different difficulty and payoff:
+People gloss over this and then get confused about why things did or did not speed up. There are three separate things you can quantize, with very different difficulty and payoff:
 
-- **Weights.** Static, known ahead of time, quantized once, offline. This is the easy one and the one that shrinks the model on disk and in memory.
-- **Activations.** The intermediate tensors flowing between layers, different for every input, so you either calibrate them offline or compute their scale on the fly. Quantizing activations is what lets you do the matmul itself in low precision (real INT8 tensor-core math), not just store weights small.
-- **KV cache.** The keys and values you store for every past token during generation. At long context this cache can dwarf the weights in memory, so quantizing it is its own topic (whole section on it below).
+- **Weights.** Fixed once training is done, so you quantize them once, offline. This is the easy one, and it is what shrinks the model on disk and in memory.
+- **Activations.** The tensors flowing between layers, different for every input. Quantizing these is what lets the matmul itself run in low precision (real INT8 tensor-core math), not just store the weights small.
+- **KV cache.** The keys and values you keep for every past token while generating. At long context this can grow bigger than the weights, so it gets its own section below.
 
-The industry shorthand is **WxAy**, meaning $x$-bit weights and $y$-bit activations, sometimes extended with **KVz** for the cache. So:
+The shorthand you will see everywhere is **WxAy**: $x$-bit weights, $y$-bit activations (and sometimes **KVz** for the cache). Two common ones:
 
-- **W8A8** is 8-bit weights and 8-bit activations, a true integer matmul, good for compute-bound serving.
-- **W4A16** is 4-bit weights but 16-bit activations, which means the weights are stored at 4-bit and dequantized back to FP16 right before the matmul, which then runs in FP16. This helps memory-bound decode (fewer weight bytes to read) but does not speed up the math itself. Most local LLM quantization (GPTQ, AWQ, GGUF, NF4) is W4A16.
-- **W8A8KV8** adds an 8-bit KV cache on top.
+- **W8A8**: 8-bit weights and 8-bit activations. A true integer matmul. Good for compute-heavy serving.
+- **W4A16**: 4-bit weights, 16-bit activations. The weights are stored at 4-bit but expanded back to FP16 right before the matmul, which then runs in FP16. This helps memory-bound decode (fewer weight bytes to read) but does not speed up the math. Most local LLM quantization (GPTQ, AWQ, GGUF, NF4) is W4A16.
 
-Keep this notation in your head. Half of "why did my quantized model get faster (or not)" is answered by which letters you actually touched.
+Keep this notation in mind. Half of "why did my quantized model get faster, or not" is answered by which letters you actually touched.
 
-## Granularity: per-tensor, per-channel, per-group
+## Granularity: one scale, or many?
 
-The scale $S$ does not have to be one number for the whole tensor. You can slice it finer:
+The scale $S$ does not have to be a single number for the whole tensor. Think of it like clothing sizes. One size for everyone (per-tensor) is cheap but fits badly. A size per person (very fine-grained) fits perfectly but is expensive to store. The useful middle is a size per small group.
 
-- **Per-tensor**: one $S$ for the entire weight matrix. Cheapest to store, worst accuracy, because a single outlier anywhere forces a coarse scale on everything.
-- **Per-channel** (a.k.a. per-axis): one $S_c$ per output channel (per row of the weight matrix), $S_c = \dfrac{\max_i |W_{c,i}|}{2^{b-1}-1}$. An outlier in one channel now only degrades that channel.
-- **Per-group / per-block**: one $S$ per contiguous chunk of, say, 32 or 128 weights inside a channel. This is the sweet spot at 4-bit.
+- **Per-tensor**: one $S$ for the entire weight matrix. Cheapest, worst accuracy, because a single big outlier anywhere forces a coarse step on everything.
+- **Per-channel**: one $S_c$ per output row of the matrix, $S_c = \dfrac{\max_i |W_{c,i}|}{2^{b-1}-1}$. Now an outlier in one row only hurts that row.
+- **Per-group (per-block)**: one $S$ per contiguous chunk of, say, 128 weights. This is the sweet spot at 4-bit.
 
-| Granularity          | Extra storage           | Where it shows up                                                                                       |
-| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| Per-tensor           | 1 scale per tensor      | INT8 on well-behaved layers, TensorRT default for many CNNs                                             |
-| Per-channel          | 1 scale per output row  | The standard baseline for INT8 weight quantization                                                      |
-| Per-group (e.g. 128) | 1 scale per 128 weights | What GPTQ, AWQ, and GGUF all use at 4-bit, because per-tensor INT4 on LLM weights is basically unusable |
+| Granularity | Extra storage | Where it shows up |
+|---|---|---|
+| Per-tensor | 1 scale per tensor | INT8 on well-behaved layers, many CNNs |
+| Per-channel | 1 scale per output row | The standard baseline for INT8 weights |
+| Per-group (e.g. 128) | 1 scale per 128 weights | GPTQ, AWQ, GGUF at 4-bit, because per-tensor INT4 on LLM weights is basically unusable |
 
-There is a real tradeoff here that people forget: finer granularity means more scale values to store, and those scales are usually FP16. A group size of 128 at 4-bit adds one FP16 scale per 128 weights, which is about $16/128 = 0.125$ extra bits per weight. That is why QLoRA does *double quantization* (quantizing the scales themselves) and why GGUF quantizes its super-block scales. The metadata is not free.
+There is a catch people forget: finer granularity means more scales to store, and scales are usually FP16. A group of 128 weights at 4-bit adds one 16-bit scale per 128 weights, which is $16/128 = 0.125$ extra bits per weight. That is why QLoRA even quantizes *the scales themselves* (double quantization). The metadata is not free.
 
 ## Dynamic vs static quantization
 
-**Static** means you compute the scale once, offline, from a calibration pass, and bake it in. **Dynamic** means you compute it at runtime from the actual min/max of the tensor you are looking at right now.
+**Static**: compute the scale once, offline, and bake it in. **Dynamic**: compute it on the fly from the actual min/max of whatever tensor is in front of you right now.
 
-Weights are always static, because they do not change at runtime, so there is no reason not to precompute. Activations are the interesting case. Dynamic activation quantization (compute a fresh scale per token, per forward pass) needs no calibration set and adapts to whatever comes in, at the cost of a small per-token reduction to find the max. Static activation quantization is faster at runtime but relies on your calibration data matching production traffic. In practice a lot of W8A8 serving uses **dynamic per-token** activation quantization precisely because it sidesteps the calibration-mismatch problem.
+Weights are always static, since they never change at runtime. Activations are the interesting case. Dynamic activation quantization computes a fresh scale per token, needs no calibration set, and adapts to whatever comes in, at the cost of a quick max-finding pass. A lot of W8A8 serving uses **dynamic per-token** activation quantization for exactly that reason: it sidesteps the risk that your offline calibration data does not match real traffic.
 
 ## Rounding: nearest, stochastic, and learned
 
-The obvious rounding is **round-to-nearest (RTN)**: $2.4$ becomes $2$, deterministic, done. It is what almost every one-shot PTQ conversion uses.
+The obvious choice is **round-to-nearest (RTN)**: $2.4$ becomes $2$. Deterministic, done. Almost every one-shot conversion uses it.
 
-**Stochastic rounding** rounds up with probability equal to the fractional part, so $P(\lceil x\rceil) = x - \lfloor x \rfloor$, which makes it unbiased in expectation, $E[\text{round}_{stoch}(x)] = x$. RTN has a small systematic bias on any individual value that stochastic rounding removes. This matters much more for low-precision *training*, where the same value gets rounded thousands of times and the bias would pile up, than for one-shot PTQ where you round each weight once.
+**Stochastic rounding** rounds up with probability equal to the fractional part, so $2.4$ rounds up to $3$ about 40% of the time and down to $2$ the other 60%. On average it lands back on $2.4$, i.e. it is unbiased: $E[\text{round}_{stoch}(x)] = x$. This matters mostly for low-precision *training*, where the same value gets rounded thousands of times and RTN's small bias would pile up. For one-shot weight quantization, where you round each weight once, RTN is fine.
 
-Then there is the non-obvious one. Round-to-nearest is *not actually optimal* for the model's final loss, and **AdaRound** proved it. The idea: for each weight, decide whether to round up or down by asking which choice hurts the layer's output less, rather than blindly picking the nearer grid point. AdaRound frames this as a per-layer optimization with a soft, learnable rounding mask and a regularizer that pushes each mask toward a hard up/down decision, minimizing the reconstruction error $WX - \hat W X^2$. It is a small idea with a big consequence: rounding direction is a degree of freedom you can optimize, and several later methods (including the spirit of GPTQ) are variations on "round smart, not near."
+Then the non-obvious one: rounding to the nearest grid point is **not actually optimal** for the model's output, and **AdaRound** showed it. Sometimes rounding a weight the "wrong" way (up when down was nearer) hurts the layer's output less, because of how that weight interacts with the others. AdaRound learns, per weight, whether to round up or down so the layer's *output* changes least. The takeaway that echoes through the rest of this note: rounding direction is a knob you can optimize, and several later methods are variations on "round smart, not near."
 
 ## Quantization error behaves like noise (SQNR)
 
-Model the rounding error $e = W - \hat W$ as roughly uniform on $[-S/2, S/2]$. This holds when values are not piled up on grid boundaries and not dominated by a few outliers. Its variance is:
+Here is a useful way to think about the damage. Rounding error is basically small random noise added to each weight. If a step is $S$ wide, the error on any weight is somewhere in $[-S/2, +S/2]$, and its variance works out to:
 
-$$  
-\sigma_e^2 = \frac{S^2}{12}  
+$$
+\sigma_e^2 = \frac{S^2}{12}
 $$
 
-Define the **signal-to-quantization-noise ratio** in decibels, comparing the power of the signal to the power of the rounding noise:
+We measure how loud the signal is compared to that noise with the **signal-to-quantization-noise ratio** (SQNR), in decibels:
 
-$$  
-\text{SQNR}*{dB} = 10\log*{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
+$$
+\text{SQNR}_{dB} = 10 \log_{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)
 $$
 
-Each extra bit doubles the number of grid points, which halves $S$ and quarters $\sigma_e^2$, and that works out to about **+6 dB of SQNR per bit**. This is the classic "6 dB per bit" rule. (You will often see it written as $\approx 6.02b + 1.76$ dB. The $1.76$ constant comes from assuming a full-scale sine wave, which is an ADC-theory assumption that does not automatically hold for a pile of weights, so trust the per-bit slope and treat the intercept as situational.)
+The one fact to remember: **each extra bit buys you about 6 dB.** Adding a bit doubles the number of grid points, which halves the step $S$, which quarters the noise variance, which is +6 dB. So going from 4-bit to 8-bit is roughly 24 dB cleaner. (You will see this written as $\approx 6.02b + 1.76$. Trust the "6 dB per bit" slope; the $1.76$ constant is an ADC-theory detail that assumes a specific signal shape and does not always apply to a pile of weights.)
 
-The punchline that carries through the rest of the note: quantization is literally adding structured noise to your weights and activations. You cannot make the noise go away, you can only decide where it lands. GPTQ, AWQ, SmoothQuant, and the rest are four different strategies for steering that noise away from the numbers the model actually depends on.
+The punchline that carries the rest of the note: quantization *adds noise* to your weights and activations. You cannot delete that noise, you can only choose where it lands. GPTQ, AWQ, SmoothQuant and the rest are just different strategies for steering the noise away from the numbers the model truly depends on.
 
 ---
 
 # Why LLMs are secretly hard: the outlier problem
 
-Quantization is old. People shipped INT8 convolutional nets on phones years before LLMs. So why did 8-bit break large transformers when it worked fine on a ResNet?
+Quantization is old. People shipped INT8 vision models on phones years before LLMs existed. So why did plain 8-bit break large transformers when it was fine on a ResNet?
 
-The answer, from Dettmers' LLM.int8() work, is **emergent outlier features**. Once a transformer crosses roughly 6.7B parameters, a small number of feature dimensions in the activations start taking on huge magnitudes, sometimes 20x larger than everything around them, and they appear in the *same* few dimensions across almost all tokens. These outlier dimensions are not noise. They are load-bearing, and if you quantize straight through them, the outliers stretch the scale so far that all the normal-sized values collapse into a tiny handful of grid slots, and the model's quality falls off a cliff.
+The answer, from Dettmers' LLM.int8() work, is **outlier features**. Once a transformer gets big enough (around 6.7B parameters), a handful of activation dimensions start blowing up to huge magnitudes, sometimes 20x everything around them, and they show up in the *same* few dimensions for almost every token.
 
-This one phenomenon explains most of the algorithm zoo. Every method below is, at some level, a different way of dealing with outliers:
+Here is why that is so destructive. Remember the scale $S$ is set by the largest value in the range. One monster value that is 20x bigger than everything else forces a huge step size, and now all the normal-sized weights get squashed into just a few grid slots near zero. Picture pricing a room full of people by net worth, in whole-million-dollar buckets: throw one billionaire into the room and everyone else rounds to "zero millions." The outlier eats all your precision.
 
-- **LLM.int8()** isolates the outlier dimensions and keeps them in FP16 while quantizing the rest to INT8 (mixed-precision decomposition).
-- **SmoothQuant** mathematically shifts the outlier magnitude out of the activations and into the weights, where it is easier to handle.
-- **AWQ** protects the weight channels that line up with large activations.
-- **SpQR, QuIP#** keep the worst weights in high precision or rotate the whole space so no dimension is an outlier anymore.
+And you cannot just drop the outliers, because they are load-bearing, the model genuinely relies on them. So this one phenomenon drives most of the algorithm zoo. Every method below is, underneath, a different way to handle outliers:
+
+- **LLM.int8()** pulls the outlier dimensions out and keeps them in FP16, quantizing the rest.
+- **SmoothQuant** shifts the outlier magnitude out of the activations and into the weights, which cope better.
+- **AWQ** protects the specific weight channels that line up with large activations.
+- **SpQR, QuIP#** either keep the worst weights in high precision, or rotate the whole space so no single dimension is an outlier anymore.
 
 Hold onto the outlier picture. It is the "why" behind almost everything that follows.
 
@@ -147,62 +166,62 @@ Hold onto the outlier picture. It is the "why" behind almost everything that fol
 
 # The precision format zoo
 
-Before the algorithms, the number formats they target. A format is defined by how it splits its bits between sign, exponent (dynamic range), and mantissa (precision).
+Before the algorithms, the number formats they target. A format is just how you split the bits between sign, exponent (dynamic range), and mantissa (precision).
 
-| Format             | Bits      | Layout (S/E/M) | Notes                                                                                          |
-| ------------------ | --------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| FP32               | 32        | 1 / 8 / 23     | Old training default, rarely used for inference now                                            |
-| TF32               | 19        | 1 / 8 / 10     | NVIDIA's internal tensor-core format, FP32 range with less mantissa                            |
-| FP16               | 16        | 1 / 5 / 10     | Narrow exponent, needs loss scaling in training to avoid underflow                             |
-| BF16               | 16        | 1 / 8 / 7      | Same range as FP32 with a truncated mantissa, no loss scaling needed, now the training default |
-| FP8 E4M3           | 8         | 1 / 4 / 3      | More precision, less range, used for weights and forward activations                           |
-| FP8 E5M2           | 8         | 1 / 5 / 2      | More range, less precision, used for gradients in the backward pass                            |
-| FP6 / FP4 (E2M1)   | 6 / 4     | 1 / 2 / 1      | Emerging on Blackwell-class hardware, still floating point                                     |
-| INT8 / INT4 / INT2 | 8 / 4 / 2 | fixed point    | INT8 is mainstream, INT4 is where the 4-bit zoo lives, INT2 is mostly research                 |
+| Format | Bits | Layout (S/E/M) | Notes |
+|---|---|---|---|
+| FP32 | 32 | 1 / 8 / 23 | Old training default, rarely used for inference now |
+| TF32 | 19 | 1 / 8 / 10 | NVIDIA's tensor-core format, FP32 range with less mantissa |
+| FP16 | 16 | 1 / 5 / 10 | Narrow exponent, needs loss scaling in training |
+| BF16 | 16 | 1 / 8 / 7 | FP32's range with a shorter mantissa, no loss scaling, the training default |
+| FP8 E4M3 | 8 | 1 / 4 / 3 | More precision, less range, used for weights and forward activations |
+| FP8 E5M2 | 8 | 1 / 5 / 2 | More range, less precision, used for gradients |
+| FP6 / FP4 (E2M1) | 6 / 4 | 1 / 2 / 1 | Emerging on Blackwell-class hardware, still floating point |
+| INT8 / INT4 / INT2 | 8 / 4 / 2 | fixed point | INT8 mainstream, INT4 is where the 4-bit zoo lives, INT2 mostly research |
 
-Two things are worth understanding beyond the table.
+Two things worth understanding beyond the table.
 
-**Integer vs float at the same bit-width.** INT8 spaces its levels evenly. FP8 spaces them logarithmically (dense near zero, sparse in the tails) because of the exponent. That makes FP8 naturally better at absorbing outliers, which is a big reason FP8 became the preferred *serving* format on Hopper (H100) and later hardware: it gives you near-INT8 memory savings with much less of the outlier pain, and the hardware has native FP8 tensor cores so the matmul is genuinely faster too.
+**Integer vs float at the same bit-width.** INT8 spaces its levels evenly. FP8 spaces them unevenly, dense near zero and sparse out in the tails, because of the exponent. That makes FP8 naturally better at swallowing outliers, which is a big reason it became the go-to *serving* format on H100-class hardware: near-INT8 memory savings, much less outlier pain, and native FP8 tensor cores so the math is genuinely faster too.
 
-**MX / microscaling formats.** The newer OCP "MX" formats (MXFP8, MXFP6, MXFP4) are block formats: a block of 32 elements shares one small power-of-two scale (an 8-bit exponent, E8M0), and each element is a tiny float like FP4 E2M1. This is basically "per-block scaling, standardized into the number format itself and supported in hardware," and it is where Blackwell-era low-precision inference is heading. If per-group quantization is a software convention, MX is that convention baked into silicon.
+**MX / microscaling formats.** The newer OCP "MX" formats (MXFP8, MXFP6, MXFP4) are per-block by design: a block of 32 elements shares one tiny power-of-two scale, and each element is a small float like FP4. This is basically per-group quantization baked into the number format and supported directly in hardware. It is where Blackwell-era low-precision inference is heading.
 
 ### NF4: a grid shaped like the weights
 
-NF4 (NormalFloat4), from the QLoRA paper, starts from a real observation: pretrained weights are close to zero-mean Gaussian. A uniform 4-bit grid wastes slots out in the tails where almost no weights live, and is too coarse near zero where most of them live. NF4 instead places its 16 levels at the **quantiles of a standard normal**, so each slot holds an equal amount of probability mass rather than an equal slice of the number line. The codebook levels are:
+NF4 (NormalFloat4), from the QLoRA paper, starts from one observation: trained weights are roughly a bell curve centered on zero. A uniform 4-bit grid wastes slots out in the tails where almost no weights live, and is too coarse near zero where most of them cluster. NF4 instead puts its 16 levels at the **quantiles of a standard normal**, so each slot holds an equal *slice of probability* rather than an equal slice of the number line, more resolution where the weights actually are. The 16 codebook values are:
 
-$$  
-q_i = \frac{1}{2}\Big[Q\left(\tfrac{i}{17}\right) + Q\left(\tfrac{i+1}{17}\right)\Big], \qquad i = 0, \dots, 15  
+$$
+q_i = \frac{1}{2}\Big[Q\!\left(\tfrac{i}{17}\right) + Q\!\left(\tfrac{i+1}{17}\right)\Big], \qquad i = 0, \dots, 15
 $$
 
-where $Q$ is the quantile function (inverse CDF) of $N(0,1)$. You cut the normal into 17 equal-probability boundaries and take the midpoint of each pair as a codebook value. This is information-theoretically optimal for a Gaussian source, i.e. no uniform 4-bit grid can encode more information about normally-distributed weights. QLoRA pairs NF4 with blockwise absmax normalization (each block gets its own scale so its values sit in $[-1, 1]$ before mapping to the codebook) and **double quantization**, which quantizes those per-block scales too, saving roughly another 0.4 bits per weight.
+where $Q$ is the quantile function (inverse CDF) of $N(0,1)$. In words: cut the bell curve into 17 equal-probability slices and take the midpoint of each. This is provably optimal for normally-distributed data. QLoRA pairs it with per-block normalization and double quantization (see granularity above).
 
 ### Ternary and binary: as low as it goes
 
-BitNet b1.58 pushes weights down to three values, $-1, 0, +1$, using an absmean scale:
+BitNet b1.58 pushes weights down to just three values, $\{-1, 0, +1\}$, using an absolute-mean scale:
 
-$$  
-Q_w(W) = \Delta \cdot \text{RoundClip}\left(\frac{W}{\Delta + \epsilon}, -1, 1\right), \qquad \Delta = \text{mean}(|W|)  
+$$
+Q_w(W) = \Delta \cdot \text{RoundClip}\!\left(\frac{W}{\Delta + \epsilon}, -1, 1\right), \qquad \Delta = \text{mean}(|W|)
 $$
 
-with $\text{RoundClip}(x, a, b) = \max(a, \min(b, \text{round}(x)))$, $\Delta$ the mean absolute weight, and $\epsilon$ a small guard against dividing by zero. Three states need $\log_2 3 \approx 1.58$ bits, which is the "1.58" in the name. The important caveat is that BitNet is not a post-hoc squeeze of an existing model. It is trained at this precision from scratch, which is a different regime (QAT, covered below), because you cannot take a normally-trained model down to ternary after the fact without it falling apart. Pure 1-bit (binary, $-1, +1$) is the original BitNet and is mostly a research frontier.
+with $\text{RoundClip}(x, a, b) = \max(a, \min(b, \text{round}(x)))$ and $\epsilon$ a small guard against dividing by zero. Three states need $\log_2 3 \approx 1.58$ bits, hence the name. The catch: BitNet is not a squeeze of an existing model. It is trained at this precision from scratch (QAT, below), because you simply cannot take a normally-trained model down to ternary after the fact without it falling apart. Pure 1-bit (binary) is the original BitNet and is still mostly research.
 
 ---
 
 # Calibration: turning data into scales
 
-Most PTQ methods, and all static activation quantization, need **calibration data**: a small, unlabeled sample of representative inputs that you run through the model once to see how the numbers actually behave. You are not training on it, you are measuring with it. For LLM PTQ the usual amount is on the order of 128 to 512 sequences from a general corpus like C4 or WikiText.
+Most PTQ methods need **calibration data**: a small, unlabeled sample of representative inputs (typically 128 to 512 sequences from a corpus like C4 or WikiText) that you run through the model once to watch how the numbers behave. You are not training on it, you are measuring with it.
 
-How you turn those measurements into a scale is a real design choice, and there is a ladder of increasingly clever options:
+Turning those measurements into a scale is a real design choice, and there is a ladder from crude to clever:
 
-- **Min-max.** Take the literal min and max. Simplest, fastest, and the most fragile, because one outlier sets the range for everything.
-- **Percentile clipping.** Throw away the extreme 0.1% before taking min/max. You give up representing the true extremes in exchange for a tighter grid on the bulk of the values.
-- **MSE-optimal clipping.** Search over candidate clip ranges and pick the one that minimizes reconstruction error directly, instead of trusting raw min/max.
-- **KL / entropy calibration.** This is TensorRT's classic INT8 recipe: build a histogram of the FP32 activations, then find the clipping threshold whose quantized distribution has the smallest KL divergence from the original FP32 distribution. In other words, pick the range that distorts the *shape* of the distribution least, not just the one that fits the extremes.
-- **Second-order (GPTQ).** Accumulate the full Hessian $XX^\top$ over the calibration batch, which captures how the layer's output responds to each weight, not just a range.
-- **Activation-magnitude (AWQ).** Accumulate per-channel activation averages to find which weight channels are salient.
-- **Importance matrix (GGUF imatrix).** llama.cpp can compute an "imatrix" from calibration data that weights the quantization error of each dimension by how much it actually contributes to activations, and it noticeably improves low-bit k-quants. So the common claim that "GGUF needs no calibration" is only true for the basic k-quants. The good ones increasingly use an imatrix.
+- **Min-max.** Use the literal smallest and largest value. Simplest and most fragile, one outlier sets the range for everyone.
+- **Percentile clipping.** Drop the extreme 0.1% first, then take min/max. You give up the true extremes for a tighter grid on the bulk.
+- **MSE-optimal clipping.** Search clip ranges and keep whichever minimizes reconstruction error directly.
+- **KL / entropy calibration.** TensorRT's classic INT8 recipe: pick the clipping threshold whose quantized distribution looks most like the original FP32 one (smallest KL divergence). It preserves the *shape* of the distribution, not just the extremes.
+- **Second-order (GPTQ).** Accumulate $XX^\top$ over the calibration batch, capturing how the output responds to each weight, not just a range.
+- **Activation-magnitude (AWQ).** Track per-channel activation averages to find which weight channels are salient.
+- **Importance matrix (GGUF imatrix).** llama.cpp can build an "imatrix" from calibration data that weights each dimension's error by how much it actually matters, and it clearly improves low-bit k-quants. So the common line that "GGUF needs no calibration" is only true for the basic quants; the good ones use an imatrix.
 
-> **The calibration-mismatch trap.** If you calibrate on generic web text, your model will look great on perplexity, because perplexity is measured on data that looks like your calibration set. Then it quietly degrades on code, math, long-context reasoning, or your specific domain, because the calibration set never exercised those. Low perplexity on the calibration distribution is not evidence of quality on your distribution. Always re-check on the real task. I cannot say this loudly enough, it is the single most common way people ship a broken quantized model without noticing.
+> **The calibration-mismatch trap.** If you calibrate on generic web text, the model looks great on perplexity (which is measured on similar text) and then quietly degrades on code, math, or long-context reasoning that the calibration set never touched. Low perplexity on the calibration data is *not* proof of quality on your data. Always re-check on the real task. This is the single most common way people ship a broken quantized model without noticing.
 
 ---
 
@@ -216,10 +235,10 @@ import numpy as np
 def quantize(W, bits=8, per_channel=False):
     q_min, q_max = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
     if per_channel:
-        # one scale per output row (reduce over each row's columns)
+        # one scale per output row (max over each row's columns)
         amax = np.max(np.abs(W), axis=1, keepdims=True)
     else:
-        amax = np.max(np.abs(W))
+        amax = np.max(np.abs(W))                # one scale for the whole tensor
     scale = amax / q_max
     scale = np.where(scale == 0, 1e-8, scale)   # guard all-zero rows
     W_q = np.clip(np.round(W / scale), q_min, q_max)
@@ -245,39 +264,39 @@ for per_channel in (False, True):
 # per-channel   SQNR: ~45 dB   (the outlier only costs its own row)
 ```
 
-That ~17 dB gap, from a single bad row, is the whole reason per-channel and per-group exist. Real LLM weights have far more and far worse outliers than this toy, which is exactly why plain min-max is not enough at 4-bit and why the algorithms in the next section had to be invented.
+That ~17 dB gap, caused by a single bad row, is the whole reason per-channel and per-group exist. Real LLM weights have far more and far worse outliers than this toy, which is exactly why plain min-max is not enough at 4-bit, and why the algorithms in the next section had to be invented.
 
 ---
 
 # The post-training quantization zoo
 
-PTQ takes a frozen, already-trained model and quantizes it with no retraining, no gradients through the whole network, and calibration measured in minutes to hours instead of GPU-days. This is where nearly all the research effort has gone, because it is what you can actually do to someone else's open-weights checkpoint on one machine.
+PTQ takes a frozen, already-trained model and quantizes it with no retraining and no gradients through the whole network, in minutes to hours instead of GPU-days. This is where most of the research has gone, because it is what you can actually do to someone else's open-weights checkpoint on one machine.
 
 ## LLM.int8(): keep the outliers in FP16
 
-The first method that made 8-bit work for large models, and the cleanest illustration of the outlier idea. It uses **vector-wise quantization** (a separate scale per row of the activations and per column of the weights) and then does something clever: it detects the handful of outlier feature dimensions, pulls those specific columns out, and computes them in FP16, while the other 99%+ of the matmul runs in INT8. The two partial results are added back together. So it is a **mixed-precision decomposition**: almost all the compute is 8-bit, but the load-bearing outliers never get quantized. This is exactly what `load_in_8bit=True` does in bitsandbytes. It is nearly lossless, but the FP16 side path means it does not always speed things up, it is mostly a memory play.
+The first method that made 8-bit work for big models, and the cleanest illustration of the outlier idea. It detects the handful of outlier dimensions, pulls those specific columns out, and computes them in FP16, while the other 99%+ of the matmul runs in INT8. The two partial results are added back together. So almost all the compute is 8-bit, but the load-bearing outliers never get squashed. This is exactly what `load_in_8bit=True` does in bitsandbytes. It is nearly lossless, but the FP16 side path means it is mostly a memory win, not always a speed one.
 
 ## GPTQ: round using second-order information
 
-GPTQ treats quantization as a per-layer least-squares problem, not a per-weight rounding rule. Given calibration inputs $X$ to a linear layer and its weights $W$, it wants the quantized $\hat W$ that changes the layer's *output* the least:
+The plain idea first: quantize the weights one column at a time, and after each column, **nudge the not-yet-quantized weights to make up for the error you just introduced.** It is like packing a suitcase and, each time you squash one item, shifting the others to keep the overall shape right.
 
-$$  
-\hat{W} = \arg\min_{\hat{W}}  WX - \hat{W}X_2^2  
+More precisely, GPTQ treats each layer as a least-squares problem. Given calibration inputs $X$ and weights $W$, it wants the quantized $\hat W$ whose *output* is closest to the original:
+
+$$
+\hat{W} = \arg\min_{\hat{W}} \; \|WX - \hat{W}X\|_2^2
 $$
 
-The subtlety is that it does not quantize each weight independently. When it rounds one weight and introduces an error, it *adjusts the weights it has not quantized yet* to cancel that error out.
+To know how to compensate, it uses the layer's Hessian $H = 2XX^\top$, which measures how sensitive the output is to each weight and how the weights interact. This comes from an older pruning method (Optimal Brain Surgeon) adapted to quantization (Optimal Brain Quantization, OBQ). The per-weight update and the error it costs are:
 
-**The lineage.** This comes from Optimal Brain Surgeon (OBS), originally a pruning method, adapted to quantization as Optimal Brain Quantization (OBQ). OBQ quantizes one weight at a time and, after each, nudges every remaining weight in that row to compensate, using the layer's Hessian $H = 2XX^\top$. That Hessian is the second-order term of the Taylor expansion of the squared error around $W$, and notably it depends only on the inputs $X$, so the whole output layer shares it. OBQ's single-weight update and the error it costs are:
-
-$$  
-\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]*{qq}} H^{-1}*{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
+$$
+\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]_{qq}}\, H^{-1}_{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}
 $$
 
-OBQ greedily quantizes whichever weight has the smallest $\varepsilon_q$ next, which is accurate but far too slow at billions of parameters. GPTQ makes it feasible with three moves:
+You do not need to memorize that. The point is: $\delta$ is the correction spread across the remaining weights, and $\varepsilon_q$ is how much error this weight costs. OBQ is accurate but far too slow at billions of parameters, so GPTQ makes three practical simplifications:
 
-1. **Fixed order.** Just quantize columns left to right in a fixed order instead of re-sorting by error every step. At LLM scale this is almost as good and hugely cheaper. (The optional `act_order` / `desc_act` flag brings back a smarter ordering, quantizing the most important columns first, for a bit more accuracy.)
-2. **Cholesky reformulation.** Precompute the Cholesky factorization of $H^{-1}$ once, up front. All the row-by-row compensation terms drop out of that factor, so you never repeatedly invert a shrinking Hessian, which is where the naive version becomes numerically unstable.
-3. **Lazy batch updates.** Quantize a block of columns (say 128) using the Cholesky factor, accumulate their corrections, and apply the whole thing to the rest of the matrix as one big matmul, instead of many tiny vector updates. GPUs are good at big matmuls and bad at many small updates, so this is what makes GPTQ run in minutes.
+1. **Fixed order.** Just quantize columns left to right instead of re-sorting by error every step. At LLM scale this is nearly as good and much cheaper. (An optional `act_order` flag brings back smart ordering for a little more accuracy.)
+2. **Cholesky trick.** Precompute one matrix factorization of $H^{-1}$ up front, so all the corrections fall out of it cleanly instead of repeatedly inverting a shrinking matrix (which is numerically unstable).
+3. **Lazy batch updates.** Correct a block of 128 columns at once as a single big matmul, rather than many tiny updates. GPUs love big matmuls, so this is what makes GPTQ run in minutes.
 
 ```
  weight matrix, one row = one output neuron:
@@ -285,119 +304,119 @@ OBQ greedily quantizes whichever weight has the smallest $\varepsilon_q$ next, w
  col:   0   1   2   3 | 4   5   6   7 | ...
        [q] [q] [q] [q]|[·] [·] [·] [·]| ...
         └── block 1 ──┘
-        quantize this block, accumulate the
+        quantize this block, work out the
         compensation, then push it onto every
         remaining column with one matmul ───────►
 ```
 
-> **Why is this fast if the math looks so heavy?** Because GPTQ never runs a backward pass or touches the training loss. It is a forward pass over calibration data plus some linear algebra per layer. It is solving a small local least-squares problem for each layer, not optimizing the whole network end to end. That is the trick to the whole PTQ family: stay local, stay gradient-free.
+> **Why is this fast if the math looks so heavy?** Because GPTQ never runs a backward pass or touches the training loss. It is a forward pass over calibration data plus some linear algebra, layer by layer. It solves a small local problem per layer instead of optimizing the whole network. That is the trick behind the whole PTQ family: stay local, stay gradient-free.
 
 ## AWQ: protect the weights the activations care about
 
-AWQ starts from an empirical claim: in a trained LLM, well under 1% of weight channels dominate the output quality, and you can find them not by looking at weight magnitude (the naive guess) but by looking at **activation magnitude**. Channels that consistently see large activations are the ones whose weight precision matters.
+AWQ starts from a sharp observation: fewer than 1% of weight channels really drive output quality, and you find them by looking at **activation** magnitude, not weight magnitude. Channels that consistently see large activations are the ones whose weights you must keep accurate.
 
-The move that makes protecting them cost nothing extra is a plain algebraic identity. For a linear layer $Y = XW$, scale a channel's weights up by $s$ and divide the matching activations by $s$:
+Protecting them costs nothing, thanks to a simple trick. In a matmul $Y = XW$ you can scale a weight channel *up* and scale the matching input *down* by the same factor, and the output is unchanged:
 
-$$  
-Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)  
+$$
+Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)
 $$
 
-The output is unchanged, but the scaled-up weight channel now has a smaller *relative* rounding error, because the same absolute quantization step is a smaller fraction of a bigger number. AWQ searches for the per-channel scale as $s = (\bar{|X|})^\alpha$, grid-searching $\alpha \in [0,1]$ on a little calibration data to minimize output error. Crucially the $\text{diag}(s)^{-1}$ on the activation side is not a runtime multiply, it is folded into the previous layer's weights (or an adjacent LayerNorm) at export time. So AWQ adds zero inference overhead and stores nothing in mixed precision, it just quantizes 4-bit weights that happen to be pre-scaled. That is why it is fast to apply and holds quality well, and why you see it everywhere on served models.
+But the scaled-up weights now suffer *less* rounding error, because a fixed step size is a smaller fraction of a bigger number. AWQ finds the per-channel scale $s = (\bar{|X|})^\alpha$ by a quick search over $\alpha \in [0,1]$. The best part: the activation-side scaling is folded into the previous layer at export time, so it adds zero runtime cost and stores nothing in mixed precision. It just quantizes 4-bit weights that were pre-scaled to protect the important ones. That is why AWQ is fast to apply and holds quality, and why it shows up everywhere.
 
 ## SmoothQuant: move the difficulty from activations to weights
 
-GPTQ and AWQ are weight-only (W4A16). SmoothQuant is after the harder prize: full **W8A8**, where you quantize activations too and get a genuine integer matmul for compute-bound serving. The obstacle, again, is activation outliers. Weights are flat and easy, activations have those few monstrous channels. SmoothQuant uses the same identity as AWQ but aimed the other way, smoothing the activations by pushing some of their range into the weights, which tolerate it better:
+GPTQ and AWQ are weight-only (W4A16). SmoothQuant goes after the harder prize, full **W8A8**, where activations are quantized too so you get a genuine integer matmul for compute-heavy serving. The obstacle is those activation outliers again. Weights are flat and easy; activations have the few monster channels. SmoothQuant uses the same scale-shifting trick as AWQ, but aimed the other way: it smooths the activations by pushing some of their range into the weights, which tolerate it better.
 
-$$  
-s_j = \frac{\max(|X_j|)^\alpha}{\max(|W_j|)^{1-\alpha}}, \qquad Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)  
+$$
+s_j = \frac{\max(|X_j|)^\alpha}{\max(|W_j|)^{1-\alpha}}, \qquad Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)
 $$
 
-The exponent $\alpha$ is the "migration strength": bigger $\alpha$ dumps more difficulty onto the weights, smaller $\alpha$ leaves more on the activations, and $\alpha = 0.5$ is the usual sweet spot, which simplifies to $s_j = \sqrt{\max(|X_j|)/\max(|W_j|)}$. The one-line way to keep AWQ and SmoothQuant straight: AWQ is weight-only and protects salient weight channels for memory savings, SmoothQuant is weight-and-activation and rebalances the joint problem for throughput.
+The exponent $\alpha$ controls how much difficulty moves; $\alpha = 0.5$ is the usual sweet spot, which simplifies to $s_j = \sqrt{\max(|X_j|)/\max(|W_j|)}$. The one-liner to keep them straight: **AWQ** protects salient weights for memory savings (weight-only), **SmoothQuant** rebalances weights and activations for throughput (W8A8).
 
 ## OmniQuant: learn the clipping and the smoothing
 
-OmniQuant is the "make the knobs learnable" step. Instead of hand-picking clip ranges and smoothing factors, it makes the weight clipping thresholds (learnable weight clipping) and the equivalence transform (learnable equivalent transformation) into trainable parameters, and optimizes them block by block with gradient descent against the reconstruction error. It is still cheap because it only trains those few extra parameters per block, not the model, but it consistently squeezes out more accuracy at low bit-widths than the hand-tuned methods.
+OmniQuant is the "make the knobs learnable" step. Instead of hand-picking clip ranges and smoothing factors, it turns them into trainable parameters and optimizes them block by block with gradient descent. It stays cheap because it only trains those few extra parameters, not the model, but it squeezes out more accuracy at low bit-widths than the hand-tuned methods.
 
 ## Going below 4 bits: SpQR, QuIP#, AQLM
 
-At 2 to 3 bits, uniform quantization stops working and you need cleverer representations. These are the frontier, worth knowing by name and idea:
+At 2 to 3 bits, uniform quantization breaks down and you need cleverer representations. Worth knowing by name and idea:
 
-- **SpQR (Sparse-Quantized Representation).** Finds the small set of outlier weights that cause most of the error and stores *those* in high precision as a sparse side matrix, while the rest go to 3 to 4 bits. It is the weight-side analogue of LLM.int8()'s activation-side outlier isolation.
-- **QuIP and QuIP#.** Built on "incoherence processing": multiply the weights and Hessian by random orthogonal or Hadamard rotations so that no single coordinate is an outlier anymore (you spread the difficulty evenly across all dimensions), which makes even 2-bit viable. QuIP# adds a lattice codebook (the E8 lattice) to pack the rotated weights efficiently. This is a genuinely different idea from everything above: instead of protecting outliers, rotate the space until there are none.
-- **AQLM (Additive Quantization of Language Models).** Represents each weight vector as a sum of vectors picked from several learned codebooks, which is vector quantization rather than scalar quantization. It reaches 2-bit with surprisingly little loss, at the cost of a heavier, slower quantization process.
+- **SpQR (Sparse-Quantized Representation).** Keeps the small set of worst-offending weights in high precision as a sparse side table, and quantizes the rest to 3 to 4 bits. The weight-side version of LLM.int8()'s outlier isolation.
+- **QuIP / QuIP#.** Rotate the weights (with random orthogonal or Hadamard transforms) so no single coordinate is an outlier anymore, spreading the difficulty evenly, which makes even 2-bit viable. QuIP# adds a lattice codebook to pack them tightly. A genuinely different idea: instead of protecting outliers, rotate until there are none.
+- **AQLM.** Represents each weight vector as a sum of vectors from learned codebooks (vector quantization, not scalar). Reaches 2-bit with surprisingly little loss, at the cost of a slower quantization process.
 
-The through-line: scalar uniform grids run out of room below 4-bit, so you either keep the worst weights in high precision (SpQR), rotate the outliers away (QuIP#), or switch to codebooks (AQLM).
+The through-line: scalar grids run out of room below 4-bit, so you either keep the worst weights high-precision (SpQR), rotate the outliers away (QuIP#), or switch to codebooks (AQLM).
 
 ## GGUF / llama.cpp k-quants: how most people actually run models locally
 
-If you have run a model on your laptop through Ollama or LM Studio, you have used this, because they wrap llama.cpp. GGUF's k-quants use a hierarchical block layout: weights are grouped into **super-blocks of 256 values**, each super-block holds several sub-blocks with their own scale and min, and the super-block's own scale/min are themselves quantized. That last part is a double-quantization trick to keep the per-sub-block metadata cheap.
+If you have run a model on your laptop via Ollama or LM Studio, you have used this, because they wrap llama.cpp. GGUF's k-quants group weights into **super-blocks of 256**, split into sub-blocks that each get their own scale, and then quantize the super-block's scales too (double quantization, to keep the metadata cheap).
 
-The naming looks cryptic but is simple once you decode it. `Q4_0` and `Q4_1` are the old flat formats (one scale per block, no super-block structure). The `_K` formats are the k-quants, and the `_S` / `_M` / `_L` suffix is how much mixed precision they use: the `_M` and `_L` variants keep certain error-sensitive tensors (commonly the attention value projection and the second feed-forward matrix) at a higher bit-width than the rest. `Q4_K_M` sits around 4.8 effective bits per weight and is the default "good for almost everything" choice.
+The names look cryptic but decode simply. `Q4_0` / `Q4_1` are the old flat formats. The `_K` formats are k-quants, and the `_S` / `_M` / `_L` suffix says how much mixed precision they use: `_M` and `_L` keep a few error-sensitive tensors at higher bit-width. `Q4_K_M` sits around 4.8 bits per weight and is the default "good for almost everything" pick.
 
-| Quant    | ~bits/weight | Quality vs FP16             | When you reach for it                |
-| -------- | ------------ | --------------------------- | ------------------------------------ |
-| `Q8_0`   | ~8.5         | Essentially lossless        | You have the VRAM and want zero risk |
-| `Q6_K`   | ~6.6         | Very small loss             | High-quality local inference         |
-| `Q5_K_M` | ~5.7         | Small loss                  | Good balance on mid-range hardware   |
-| `Q4_K_M` | ~4.8         | Noticeable but usually fine | The default for most local setups    |
-| `Q3_K_M` | ~3.9         | Real degradation            | Tight VRAM                           |
-| `Q2_K`   | ~2.6         | Significant                 | Last resort when nothing else fits   |
+| Quant | ~bits/weight | Quality vs FP16 | When you reach for it |
+|---|---|---|---|
+| `Q8_0` | ~8.5 | Essentially lossless | You have the VRAM and want zero risk |
+| `Q6_K` | ~6.6 | Very small loss | High-quality local inference |
+| `Q5_K_M` | ~5.7 | Small loss | Good balance on mid-range hardware |
+| `Q4_K_M` | ~4.8 | Noticeable but usually fine | The default for most local setups |
+| `Q3_K_M` | ~3.9 | Real degradation | Tight VRAM |
+| `Q2_K` | ~2.6 | Significant | Last resort when nothing else fits |
 
-Basic k-quants need no calibration, the block stats come straight from the weights, which is why you can convert a model to GGUF in minutes with nothing but the checkpoint. The higher-quality path uses an imatrix from calibration data (see the calibration section) and does measurably better at the low end.
+Basic k-quants need no calibration, so you can convert a model in minutes with nothing but the checkpoint. The higher-quality path uses an imatrix from calibration data and does measurably better at the low end.
 
 ---
 
 # Quantization-aware training (QAT)
 
-Everything above operates on a frozen model. QAT instead trains the model to expect the rounding it will face at inference, which is the only real option once you go aggressive enough that PTQ can no longer recover the accuracy.
+Everything above works on a frozen model. QAT instead *trains the model to expect* the rounding it will face at inference. You reach for it when you are pushing precision so low that PTQ can no longer recover the accuracy.
 
 ## Fake quantization and the straight-through estimator
 
-QAT inserts a "fake quantize" op into the forward pass, the same round-clip-dequantize you have seen, and computes with $\tilde W$ instead of $W$, while the parameter you actually optimize stays full-precision $W$:
+QAT inserts a "fake quantize" step into the forward pass, the same round-clip-dequantize you have seen, so the model computes with the rounded weights $\tilde W$ while the parameter you optimize stays full-precision $W$:
 
-$$  
-\tilde{W} = S\Big(\text{clip}\big(\text{round}(W/S) + Z, q_{min}, q_{max}\big) - Z\Big)  
+$$
+\tilde{W} = S\Big(\text{clip}\big(\text{round}(W/S) + Z,\; q_{min}, q_{max}\big) - Z\Big)
 $$
 
-The problem is that $\text{round}(\cdot)$ is a staircase with zero gradient almost everywhere, so backprop has nothing to work with. The **straight-through estimator (STE)** fixes this by pretending, on the backward pass, that the rounding was the identity function inside the representable range and flat outside it:
+The problem: $\text{round}(\cdot)$ is a flat staircase, so its gradient is zero almost everywhere and backprop has nothing to push on. The **straight-through estimator (STE)** cheats: on the backward pass it pretends the rounding was just the identity function (as long as the value is inside the range):
 
-$$  
-\frac{\partial L}{\partial W} \approx \frac{\partial L}{\partial \tilde{W}} \cdot \mathbb{1}[\alpha \le W \le \beta]  
+$$
+\frac{\partial L}{\partial W} \approx \frac{\partial L}{\partial \tilde{W}} \cdot \mathbb{1}[\alpha \le W \le \beta]
 $$
 
-> **Why does such a crude lie work?** Because rounding is a small local perturbation, and for most values $\text{round}(x)$ is close to $x$. Treating it as the identity lets gradient signal flow through, and the optimizer ends up finding weights that are *robust to being rounded*, which was the goal the whole time. You are not trying to differentiate the staircase, you are trying to nudge weights into positions where the staircase does not hurt.
+> **Why does such a crude cheat work?** Because rounding is a small nudge, and for most values $\text{round}(x)$ is close to $x$. Treating it as the identity lets gradients flow, and the optimizer ends up parking weights in positions that survive rounding, which was the goal all along. You are not trying to differentiate the staircase, you are nudging weights to where the staircase does not hurt.
 
-A refinement worth knowing is **LSQ (Learned Step Size Quantization)**, which makes the scale $S$ itself a trainable parameter learned by gradient descent (with a carefully chosen gradient scaling), rather than fixed from calibration. Letting the model learn its own quantization grid is a reliable accuracy win in QAT.
+A refinement worth knowing is **LSQ (Learned Step Size Quantization)**, which makes the scale $S$ itself a trainable parameter instead of fixing it from calibration. Letting the model learn its own grid is a reliable accuracy win.
 
 ## When QAT is worth it
 
-QAT needs your full training pipeline, real data, and real compute. It is training, not a ten-minute post-process. So the honest answer is that most people should not use it: for "take an open checkpoint and shrink it," PTQ (GPTQ, AWQ, GGUF) is enough, which is exactly why those dominate. QAT earns its cost in three cases: very aggressive bit-widths where PTQ has run out of room (sub-4-bit), edge and mobile deployment where you control training anyway and every bit of accuracy matters, and native-low-precision models like BitNet that are trained ternary from scratch because there is no post-hoc path to 1.58 bits.
+QAT needs your full training pipeline, real data, and real compute. So most people should not use it: for "take an open checkpoint and shrink it," PTQ (GPTQ, AWQ, GGUF) is enough, which is why those dominate. QAT earns its cost in three cases: very aggressive bit-widths where PTQ runs out of room, edge/mobile deployment where you control training and want every last point of accuracy, and native-low-precision models like BitNet that are trained ternary from scratch because there is no post-hoc path to 1.58 bits.
 
 ---
 
 # KV-cache quantization
 
-This one deserves its own section because at long context it is often the thing that actually kills you, not the weights.
+This one gets its own section because at long context it, not the weights, is often what actually runs you out of memory.
 
-During generation you cache the key and value tensors for every past token so you do not recompute them. That cache grows linearly with context length and batch size, and at 100K+ tokens it can be larger than the model weights themselves. Quantizing it is how you fit long context and large batches in memory.
+While generating, you cache the key and value tensors for every past token so you do not recompute them. That cache grows with context length and batch size, and past 100K tokens it can be bigger than the model itself. Quantizing it is how you fit long context and big batches.
 
-The catch is that keys and values have different structure, so you treat them differently. The finding from KVQuant and KIVI is that the **key** cache has outlier *channels* (specific dimensions that are consistently large, so you quantize it per-channel) while the **value** cache is better behaved and quantizes fine per-token. KIVI pushes this to 2-bit KV cache with that asymmetric treatment. In production, the simpler and very common option is an **FP8 KV cache** (supported in vLLM and TensorRT-LLM), which roughly halves cache memory with almost no quality loss and no fancy per-channel logic. If you are chasing extreme context lengths, the specialized 2-bit methods buy you more, at more complexity.
+The wrinkle: keys and values behave differently, so you treat them differently. The finding from KVQuant and KIVI is that the **key** cache has outlier *channels* (quantize it per-channel) while the **value** cache is better behaved (quantize per-token). KIVI pushes this to a 2-bit KV cache. In production the simpler, common option is an **FP8 KV cache** (vLLM, TensorRT-LLM), which roughly halves cache memory with almost no quality loss and no fancy logic. Chasing extreme context lengths, the specialized 2-bit methods buy you more, at more complexity.
 
-The mental model: weight quantization shrinks the model, KV-cache quantization shrinks the *conversation*, and for long-context or high-batch serving the second one is frequently the bigger lever.
+The mental model: weight quantization shrinks the *model*, KV-cache quantization shrinks the *conversation*, and for long-context or high-batch serving the second is frequently the bigger lever.
 
 ---
 
 # What actually gets faster (and what does not)
 
-This trips people up constantly, so let me be blunt about it.
+This trips people up constantly, so let me be blunt.
 
-**Weight-only quantization (W4A16)** stores weights small and dequantizes them back to FP16 right before the matmul. The matmul runs in FP16. So you save memory and you speed up **memory-bound decode** (fewer weight bytes to stream per token), but you do *not* speed up **compute-bound prefill**, and you add a small dequantization cost. This is GPTQ, AWQ, GGUF, and NF4. Great for local inference and for decode-heavy chat.
+**Weight-only quantization (W4A16)** stores weights small but expands them back to FP16 before the matmul, which runs in FP16. So you save memory and speed up **memory-bound decode** (fewer weight bytes to stream), but you do *not* speed up **compute-bound prefill**, and you add a small expansion cost. This is GPTQ, AWQ, GGUF, NF4. Great for local inference and decode-heavy chat.
 
-**Weight-and-activation quantization (W8A8)** quantizes activations too and runs a real integer (or FP8) matmul on the tensor cores. This speeds up the actual math, so it helps prefill and compute-bound, high-throughput serving. This is SmoothQuant, FP8, and INT8 serving in TensorRT-LLM and vLLM. It is harder to pull off because of the activation-outlier problem, which is the whole reason SmoothQuant and FP8 exist.
+**Weight-and-activation quantization (W8A8)** quantizes activations too and runs a real integer (or FP8) matmul on the tensor cores. This speeds up the actual math, so it helps prefill and high-throughput serving. This is SmoothQuant, FP8, INT8 serving in TensorRT-LLM and vLLM. It is harder because of the activation-outlier problem, which is the whole reason SmoothQuant and FP8 exist.
 
-So "I quantized my model, why is prefill the same speed" has a precise answer: you did W4A16, and prefill is compute-bound, and you only touched the memory side. Match the letters (WxAy) to your bottleneck (decode vs prefill) and the confusion goes away.
+So "I quantized my model, why is prefill the same speed" has a precise answer: you did W4A16, prefill is compute-bound, and you only touched the memory side. Match the letters (WxAy) to your bottleneck (decode vs prefill) and the confusion goes away.
 
-One more reality check: the memory savings are rarely the clean 4x the bit-width suggests. Group scales, zero-points, the occasional high-precision tensor, and the KV cache all sit outside the neatly-quantized weights. A "4-bit" model is usually more like 4.5 to 5 effective bits once you count the metadata.
+One more reality check: the memory savings are rarely the clean 4x the bit-width suggests. Group scales, zero-points, the odd high-precision tensor, and the KV cache all sit outside the tidy quantized weights. A "4-bit" model is usually more like 4.5 to 5 effective bits once you count the metadata.
 
 ---
 
@@ -414,7 +433,7 @@ bnb = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",          # the Gaussian-quantile codebook
     bnb_4bit_use_double_quant=True,     # quantize the block scales too
-    bnb_4bit_compute_dtype="bfloat16",  # dequantize to bf16 for the matmul
+    bnb_4bit_compute_dtype="bfloat16",  # expand to bf16 for the matmul
 )
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb)
 # for QLoRA you then freeze this 4-bit base and train small bf16 LoRA adapters on top
@@ -452,15 +471,15 @@ python convert_hf_to_gguf.py <hf_model_dir> --outfile model-f16.gguf
 ./llama-quantize --imatrix model.imatrix model-f16.gguf model-Q4_K_M.gguf Q4_K_M
 ```
 
-For serving, **vLLM** and **TensorRT-LLM** load GPTQ/AWQ/FP8 checkpoints directly and run them at scale, and TensorRT-LLM is where you would do INT8/FP8 W8A8 with SmoothQuant-style calibration for maximum throughput.
+For serving, **vLLM** and **TensorRT-LLM** load GPTQ / AWQ / FP8 checkpoints directly and run them at scale, and TensorRT-LLM is where you would do INT8 / FP8 W8A8 with SmoothQuant-style calibration for maximum throughput.
 
-| Tool                 | Format            | Needs calibration? | Best for                                       |
-| -------------------- | ----------------- | ------------------ | ---------------------------------------------- |
-| bitsandbytes         | INT8 / NF4        | No                 | QLoRA fine-tuning, quick 4-bit or 8-bit loads  |
-| AutoGPTQ / GPTQModel | GPTQ INT4         | Yes                | GPU-served W4A16 inference                     |
-| AutoAWQ              | AWQ INT4          | Yes (light)        | GPU-served W4A16, fast to apply, holds quality |
-| llama.cpp            | GGUF k-quants     | Optional (imatrix) | Local / CPU / Apple Silicon / edge             |
-| TensorRT-LLM / vLLM  | FP8 / INT8 / INT4 | Depends            | Production GPU serving, W8A8 throughput        |
+| Tool | Format | Needs calibration? | Best for |
+|---|---|---|---|
+| bitsandbytes | INT8 / NF4 | No | QLoRA fine-tuning, quick 4-bit or 8-bit loads |
+| AutoGPTQ / GPTQModel | GPTQ INT4 | Yes | GPU-served W4A16 inference |
+| AutoAWQ | AWQ INT4 | Yes (light) | GPU-served W4A16, fast to apply, holds quality |
+| llama.cpp | GGUF k-quants | Optional (imatrix) | Local / CPU / Apple Silicon / edge |
+| TensorRT-LLM / vLLM | FP8 / INT8 / INT4 | Depends | Production GPU serving, W8A8 throughput |
 
 ---
 
@@ -468,8 +487,8 @@ For serving, **vLLM** and **TensorRT-LLM** load GPTQ/AWQ/FP8 checkpoints directl
 
 Grounding it in specifics, because vague gestures do not help:
 
-- **GGUF community builds** of Llama, Mistral, Qwen, and friends on Hugging Face, `Q4_K_M` as the default download, run through llama.cpp, Ollama, or LM Studio. This is most local usage.
-- **GPTQ and AWQ checkpoints**, tagged `-GPTQ` or `-AWQ` on the hub, served through vLLM or TensorRT-LLM at INT4 for GPU inference.
+- **GGUF community builds** of Llama, Mistral, Qwen and friends on Hugging Face, `Q4_K_M` as the default download, run through llama.cpp, Ollama, or LM Studio. This is most local usage.
+- **GPTQ and AWQ checkpoints**, tagged `-GPTQ` or `-AWQ` on the hub, served through vLLM or TensorRT-LLM at INT4.
 - **NF4 + QLoRA**: the original QLoRA paper's Guanaco models are the canonical example, a frozen NF4 base with LoRA adapters fine-tuned on a single consumer GPU. This is how most people fine-tune large models cheaply.
 - **FP8 on H100**: increasingly the default *serving* format in vLLM, TensorRT-LLM, and NVIDIA NIM, near-FP16 quality at half the memory with native tensor-core speedups.
 - **BitNet b1.58**: Microsoft's natively-ternary models, the frontier case for where extreme compression is headed, trained low-precision from scratch rather than squeezed after the fact.
@@ -478,21 +497,21 @@ Grounding it in specifics, because vague gestures do not help:
 
 # Evaluating a quantized model
 
-You have to check the damage, and you have to check it the right way, because the easy metric lies.
+You have to check the damage, and check it the right way, because the easy metric lies.
 
-**Perplexity** (on WikiText2, C4, and so on) is cheap and standard and a *weak* signal. It measures average next-token fit, not whether the model can still reason, code, or follow instructions. A model can hold perplexity and still lose real capability.
+**Perplexity** (on WikiText2, C4, and so on) is cheap, standard, and a *weak* signal. It measures average next-token fit, not whether the model can still reason, code, or follow instructions. A model can hold perplexity and still lose real capability.
 
 **Downstream task evals** (MMLU, GSM8K, HumanEval, or your own task suite) are the real signal. Run them. Do not skip them because perplexity looked fine.
 
-**KL divergence** between the full-precision and quantized model's output distributions is the sharpest task-agnostic diagnostic:
+**KL divergence** between the full-precision and quantized model's output distributions is the sharpest task-agnostic check:
 
-$$  
-D_{KL}\big(P_{fp16}  P_{quant}\big) = \sum_i P_{fp16}(i) \log\frac{P_{fp16}(i)}{P_{quant}(i)}  
+$$
+D_{KL}\big(P_{fp16} \,\|\, P_{quant}\big) = \sum_i P_{fp16}(i)\, \log\frac{P_{fp16}(i)}{P_{quant}(i)}
 $$
 
-computed per-token over a held-out set. It catches distributional drift that a single averaged perplexity number smears over. If the quantized model is putting its probability mass in noticeably different places than the original, this sees it even when perplexity does not move.
+computed per-token over a held-out set. It catches distribution drift that a single averaged perplexity number smears over: if the quantized model is putting its probability mass in noticeably different places, this sees it even when perplexity does not move.
 
-And the caveat I flagged in [Inference Engineering](/notes/LLM-And-Agents/InferenceEgineering): quantization quality is workload-dependent. A model that benchmarks fine at INT4 can fall apart on long-context reasoning or code specifically. Evaluate on *your* task, not just perplexity.
+And the caveat I flagged in [Inference Engineering](/notes/LLM-And-Agents/InferenceEgineering): quantization quality is workload-dependent. A model that benchmarks fine at INT4 can fall apart specifically on long-context reasoning or code. Evaluate on *your* task, not just perplexity.
 
 ---
 
@@ -500,26 +519,26 @@ And the caveat I flagged in [Inference Engineering](/notes/LLM-And-Agents/Infere
 
 LLMs get all the attention now, but quantization grew up in vision and edge deployment, and that world is worth a paragraph because the ideas transfer and the tooling is mature.
 
-On phones and embedded devices, INT8 CNNs have been standard for years. **TensorFlow Lite** does post-training INT8 (per-axis weights, activations calibrated from a small representative dataset), plus lighter "dynamic range" (weights-only) and FP16 modes. **PyTorch** has a full stack: the older eager-mode flow with `QuantStub`/`DeQuantStub` and observers, FX graph-mode quantization, and the newer PT2 export path, running on backends like FBGEMM (server x86), QNNPACK/XNNPACK (mobile ARM). **ONNX Runtime** has its own PTQ and QAT tooling. NVIDIA's classic INT8 CNN recipe (the KL-divergence calibration described earlier) came out of exactly this world.
+On phones and embedded devices, INT8 CNNs have been standard for years. **TensorFlow Lite** does post-training INT8 (per-axis weights, activations calibrated from a small representative dataset), plus lighter weights-only and FP16 modes. **PyTorch** has a full stack: the older eager-mode flow with observers, FX graph-mode quantization, and the newer PT2 export path, running on backends like FBGEMM (server x86) and XNNPACK (mobile ARM). **ONNX Runtime** has its own PTQ and QAT tooling. NVIDIA's classic INT8 CNN recipe (the KL-divergence calibration above) came out of exactly this world.
 
-The differences from the LLM case are instructive. Vision models are mostly compute-bound and quantized to INT8 W8A8 to speed up the actual convolutions, whereas LLM decode is memory-bound and often quantized weight-only. Vision models rarely have the dramatic activation outliers that plague large transformers, so plain per-channel INT8 usually just works without the GPTQ/AWQ/SmoothQuant machinery. If you understand the LLM story, the vision story is the easier special case.
+The differences from the LLM case are instructive. Vision models are mostly compute-bound and quantized to INT8 W8A8 to speed up the convolutions, whereas LLM decode is memory-bound and often weight-only. Vision models rarely have the dramatic activation outliers that plague large transformers, so plain per-channel INT8 usually just works without the GPTQ/AWQ/SmoothQuant machinery. If you understand the LLM story, the vision story is the easier special case.
 
 ---
 
 # One table to bookmark
 
-| Method / Format     | Bits (WxAy) | Memory vs FP16 | Quality             | PTQ/QAT      | Calibration? | Best for                         |
-| ------------------- | ----------- | -------------- | ------------------- | ------------ | ------------ | -------------------------------- |
-| BF16 / FP16         | 16          | baseline       | reference           | n/a          | n/a          | Training, max fidelity           |
-| FP8 (E4M3)          | W8A8        | ~2x smaller    | Very high           | PTQ          | Light        | GPU serving on Hopper+           |
-| LLM.int8()          | W8A16       | ~2x smaller    | Near-lossless       | PTQ          | No           | Easy 8-bit loads, memory         |
-| SmoothQuant         | W8A8        | ~2x smaller    | High                | PTQ          | Yes          | Compute-bound INT8 serving       |
-| GPTQ                | W4A16       | ~4x smaller    | High                | PTQ          | Yes          | GPU-served 4-bit decode          |
-| AWQ                 | W4A16       | ~4x smaller    | High                | PTQ          | Yes (light)  | GPU-served 4-bit, fast to apply  |
-| GGUF `Q4_K_M`       | ~W4.8A16    | ~3.3x smaller  | Good                | PTQ          | Optional     | Local / CPU / edge               |
-| NF4 (QLoRA)         | W4A16       | ~4x smaller    | Good, great w/ LoRA | PTQ          | No           | Cheap fine-tuning on one GPU     |
-| SpQR / QuIP# / AQLM | ~W2-3A16    | ~5-8x smaller  | Frontier            | PTQ          | Yes          | Squeezing below 4-bit            |
-| Ternary (BitNet)    | ~1.58-bit   | ~10x smaller   | Model-dependent     | QAT (native) | n/a          | Extreme compression from scratch |
+| Method / Format | Bits (WxAy) | Memory vs FP16 | Quality | PTQ/QAT | Calibration? | Best for |
+|---|---|---|---|---|---|---|
+| BF16 / FP16 | 16 | baseline | reference | n/a | n/a | Training, max fidelity |
+| FP8 (E4M3) | W8A8 | ~2x smaller | Very high | PTQ | Light | GPU serving on Hopper+ |
+| LLM.int8() | W8A16 | ~2x smaller | Near-lossless | PTQ | No | Easy 8-bit loads, memory |
+| SmoothQuant | W8A8 | ~2x smaller | High | PTQ | Yes | Compute-bound INT8 serving |
+| GPTQ | W4A16 | ~4x smaller | High | PTQ | Yes | GPU-served 4-bit decode |
+| AWQ | W4A16 | ~4x smaller | High | PTQ | Yes (light) | GPU-served 4-bit, fast to apply |
+| GGUF `Q4_K_M` | ~W4.8A16 | ~3.3x smaller | Good | PTQ | Optional | Local / CPU / edge |
+| NF4 (QLoRA) | W4A16 | ~4x smaller | Good, great w/ LoRA | PTQ | No | Cheap fine-tuning on one GPU |
+| SpQR / QuIP# / AQLM | ~W2-3A16 | ~5-8x smaller | Frontier | PTQ | Yes | Squeezing below 4-bit |
+| Ternary (BitNet) | ~1.58-bit | ~10x smaller | Model-dependent | QAT (native) | n/a | Extreme compression from scratch |
 
 ---
 
@@ -527,9 +546,9 @@ The differences from the LLM case are instructive. Vision models are mostly comp
 
 If you forget everything else, keep these:
 
-- Quantization is a linear map from real numbers onto a grid. Scale sets the spacing, zero-point aligns it, and every method is a smarter way to choose the range or the rounding than plain min-max.
-- The error is noise you cannot delete, only steer. You get roughly 6 dB of headroom per bit, and the whole craft is aiming that noise away from the numbers the model depends on.
-- LLMs are hard because of a few huge outlier features, and almost every method is a different way of dealing with those outliers: isolate them (LLM.int8, SpQR), migrate them (SmoothQuant), protect around them (AWQ), or rotate them away (QuIP#).
+- Quantization maps real numbers onto a grid. Scale sets the spacing, zero-point aligns it, and every method is a smarter way to choose the range or the rounding than plain min-max.
+- The error is noise you cannot delete, only steer. Each bit buys about 6 dB, and the craft is aiming the noise away from the weights the model depends on.
+- LLMs are hard because of a few huge outlier features, and almost every method is a different way to deal with them: isolate them (LLM.int8, SpQR), migrate them (SmoothQuant), protect around them (AWQ), or rotate them away (QuIP#).
 - GPTQ rounds using second-order information, calibration-only and gradient-free, which is why it is both accurate and fast.
 - Match the WxAy to your bottleneck: weight-only (W4A16) speeds up memory-bound decode, weight-and-activation (W8A8, FP8) speeds up compute-bound prefill and throughput.
 - KV-cache quantization shrinks the conversation, not the model, and at long context it is often the bigger win.

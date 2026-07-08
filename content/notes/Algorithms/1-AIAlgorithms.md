@@ -1009,7 +1009,7 @@ print(bpe_train(["low", "lower", "lowest"], num_merges=3))   # learns ('l','o'),
 
 ---
 
-> **Deeper dive:** for the full math and algorithm treatment of quantization — GPTQ, AWQ, SmoothQuant, GGUF k-quants, QAT/STE, NF4, BitNet — see the standalone [Quantization primer](/notes/Primers/Quantization).
+> **Deeper dive:** I go deep on the math and the full algorithm zoo (GPTQ, AWQ, SmoothQuant, GGUF k-quants, QAT/STE, NF4, BitNet) in the standalone [Quantization primer](/notes/Primers/Quantization).
 
 ---
 

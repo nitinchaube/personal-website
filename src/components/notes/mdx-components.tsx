@@ -3,6 +3,7 @@ import { stripOrderPrefixPath } from '../../lib/notes-shared';
 import { withBase } from '../../lib/site';
 
 type ImgProps = ComponentProps<'img'>;
+type AnchorProps = ComponentProps<'a'>;
 
 /**
  * Build an MDX component map for a specific post.
@@ -43,5 +44,14 @@ export function mdxComponentsFor(postDir: string) {
     return <img src={finalSrc} alt='' loading='lazy' {...rest} />;
   };
 
-  return { img: Img };
+  // Note content links to other notes with site-absolute paths like
+  // `/notes/Category/Slug`. Plain markdown renders these as bare <a> tags
+  // (not Next's <Link>), so they need the same basePath rewrite as images
+  // to resolve correctly on GitHub Pages project sites (e.g. /personal-website).
+  const Anchor = ({ href, ...rest }: AnchorProps) => {
+    const finalHref = typeof href === 'string' ? withBase(href) : href;
+    return <a href={finalHref} {...rest} />;
+  };
+
+  return { img: Img, a: Anchor };
 }
