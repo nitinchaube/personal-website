@@ -29,26 +29,26 @@ Think of it like rounding prices. If you only had whole dollars to work with, yo
 
 You have a tensor of real weights $W$. Pick a float range $[\alpha, \beta]$ that covers the values you care about, and the integer range $[q_{min}, q_{max}]$ your bit-width allows (so $[0, 255]$ for unsigned INT8). Two numbers define the whole mapping, the **scale** $S$ (how many real units one integer step is worth) and the **zero-point** $Z$ (which integer stands for real zero):
 
-$$
-S = \frac{\beta - \alpha}{q_{max} - q_{min}}, \qquad Z = \text{round}\left(q_{min} - \frac{\alpha}{S}\right)
+$$  
+S = \frac{\beta - \alpha}{q_{max} - q_{min}}, \qquad Z = \text{round}\left(q_{min} - \frac{\alpha}{S}\right)  
 $$
 
 To quantize a value you divide by the step, round, and shift by $Z$. To get an approximate value back you undo those:
 
-$$
-W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z,\; q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)
+$$  
+W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right) + Z, q_{min}, q_{max}\right), \qquad \hat{W} = S(W_q - Z)  
 $$
 
 **A worked example.** Say your weights run from $\alpha = -0.8$ to $\beta = 1.2$, and you want unsigned INT8 ($q_{min}=0$, $q_{max}=255$).
 
-$$
-S = \frac{1.2 - (-0.8)}{255 - 0} = \frac{2.0}{255} \approx 0.00784, \qquad Z = \text{round}\left(0 - \frac{-0.8}{0.00784}\right) = 102
+$$  
+S = \frac{1.2 - (-0.8)}{255 - 0} = \frac{2.0}{255} \approx 0.00784, \qquad Z = \text{round}\left(0 - \frac{-0.8}{0.00784}\right) = 102  
 $$
 
 Now quantize the weight $w = 0.5$:
 
-$$
-W_q = \text{round}\!\left(\frac{0.5}{0.00784}\right) + 102 = 64 + 102 = 166
+$$  
+W_q = \text{round}\left(\frac{0.5}{0.00784}\right) + 102 = 64 + 102 = 166  
 $$
 
 And read it back: $\hat W = 0.00784 \times (166 - 102) = 0.502$. So $0.5$ is stored as the single byte $166$ and comes back as $0.502$. The error, about $0.002$, is the price of the byte.
@@ -72,8 +72,8 @@ The example above is **asymmetric**: it uses a zero-point $Z$ because the range 
 
 If you instead force $Z = 0$ you get **symmetric** quantization. You center the range on zero, $[-\alpha_{max}, \alpha_{max}]$, and drop the offset entirely:
 
-$$
-W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right), -2^{b-1}, 2^{b-1}-1\right), \qquad S = \frac{\alpha_{max}}{2^{b-1}-1}
+$$  
+W_q = \text{clip}\left(\text{round}\left(\frac{W}{S}\right), -2^{b-1}, 2^{b-1}-1\right), \qquad S = \frac{\alpha_{max}}{2^{b-1}-1}  
 $$
 
 Redo the example symmetrically: max absolute value $1.2$, signed INT8 range $[-127, 127]$, so $S = 1.2/127 \approx 0.00945$. Then $0.5$ maps to $\text{round}(0.5/0.00945) = 53$, and reads back as $53 \times 0.00945 = 0.501$. No zero-point needed. That missing $Z$ means one less add at inference, so the integer matmul is a touch faster.
@@ -103,21 +103,23 @@ The scale $S$ does not have to be a single number for the whole tensor. Think of
 - **Per-channel**: one $S_c$ per output row of the matrix, $S_c = \dfrac{\max_i |W_{c,i}|}{2^{b-1}-1}$. Now an outlier in one row only hurts that row.
 - **Per-group (per-block)**: one $S$ per contiguous chunk of, say, 128 weights. This is the sweet spot at 4-bit.
 
-| Granularity | Extra storage | Where it shows up |
-|---|---|---|
-| Per-tensor | 1 scale per tensor | INT8 on well-behaved layers, many CNNs |
-| Per-channel | 1 scale per output row | The standard baseline for INT8 weights |
+| Granularity          | Extra storage           | Where it shows up                                                                      |
+| -------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| Per-tensor           | 1 scale per tensor      | INT8 on well-behaved layers, many CNNs                                                 |
+| Per-channel          | 1 scale per output row  | The standard baseline for INT8 weights                                                 |
 | Per-group (e.g. 128) | 1 scale per 128 weights | GPTQ, AWQ, GGUF at 4-bit, because per-tensor INT4 on LLM weights is basically unusable |
 
 There is a catch people forget: finer granularity means more scales to store, and scales are usually FP16. A group of 128 weights at 4-bit adds one 16-bit scale per 128 weights, which is $16/128 = 0.125$ extra bits per weight. That is why QLoRA even quantizes *the scales themselves* (double quantization). The metadata is not free.
 
 ## Dynamic vs static quantization
 
-**Static**: compute the scale once, offline, and bake it in. **Dynamic**: compute it on the fly from the actual min/max of whatever tensor is in front of you right now.
+**Static**: compute the scale once, offline, and bake it in.
+
+**Dynamic**: compute it on the fly from the actual min/max of whatever tensor is in front of you right now.
 
 Weights are always static, since they never change at runtime. Activations are the interesting case. Dynamic activation quantization computes a fresh scale per token, needs no calibration set, and adapts to whatever comes in, at the cost of a quick max-finding pass. A lot of W8A8 serving uses **dynamic per-token** activation quantization for exactly that reason: it sidesteps the risk that your offline calibration data does not match real traffic.
 
-## Rounding: nearest, stochastic, and learned
+## Rounding: (nearest, stochastic and learned)
 
 The obvious choice is **round-to-nearest (RTN)**: $2.4$ becomes $2$. Deterministic, done. Almost every one-shot conversion uses it.
 
@@ -129,14 +131,14 @@ Then the non-obvious one: rounding to the nearest grid point is **not actually o
 
 Here is a useful way to think about the damage. Rounding error is basically small random noise added to each weight. If a step is $S$ wide, the error on any weight is somewhere in $[-S/2, +S/2]$, and its variance works out to:
 
-$$
-\sigma_e^2 = \frac{S^2}{12}
+$$  
+\sigma_e^2 = \frac{S^2}{12}  
 $$
 
 We measure how loud the signal is compared to that noise with the **signal-to-quantization-noise ratio** (SQNR), in decibels:
 
-$$
-\text{SQNR}_{dB} = 10 \log_{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)
+$$  
+\text{SQNR}*{dB} = 10 \log*{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
 $$
 
 The one fact to remember: **each extra bit buys you about 6 dB.** Adding a bit doubles the number of grid points, which halves the step $S$, which quarters the noise variance, which is +6 dB. So going from 4-bit to 8-bit is roughly 24 dB cleaner. (You will see this written as $\approx 6.02b + 1.76$. Trust the "6 dB per bit" slope; the $1.76$ constant is an ADC-theory detail that assumes a specific signal shape and does not always apply to a pile of weights.)
@@ -168,39 +170,39 @@ Hold onto the outlier picture. It is the "why" behind almost everything that fol
 
 Before the algorithms, the number formats they target. A format is just how you split the bits between sign, exponent (dynamic range), and mantissa (precision).
 
-| Format | Bits | Layout (S/E/M) | Notes |
-|---|---|---|---|
-| FP32 | 32 | 1 / 8 / 23 | Old training default, rarely used for inference now |
-| TF32 | 19 | 1 / 8 / 10 | NVIDIA's tensor-core format, FP32 range with less mantissa |
-| FP16 | 16 | 1 / 5 / 10 | Narrow exponent, needs loss scaling in training |
-| BF16 | 16 | 1 / 8 / 7 | FP32's range with a shorter mantissa, no loss scaling, the training default |
-| FP8 E4M3 | 8 | 1 / 4 / 3 | More precision, less range, used for weights and forward activations |
-| FP8 E5M2 | 8 | 1 / 5 / 2 | More range, less precision, used for gradients |
-| FP6 / FP4 (E2M1) | 6 / 4 | 1 / 2 / 1 | Emerging on Blackwell-class hardware, still floating point |
-| INT8 / INT4 / INT2 | 8 / 4 / 2 | fixed point | INT8 mainstream, INT4 is where the 4-bit zoo lives, INT2 mostly research |
+| Format             | Bits      | Layout (S/E/M) | Notes                                                                       |
+| ------------------ | --------- | -------------- | --------------------------------------------------------------------------- |
+| FP32               | 32        | 1 / 8 / 23     | Old training default, rarely used for inference now                         |
+| TF32               | 19        | 1 / 8 / 10     | NVIDIA's tensor-core format, FP32 range with less mantissa                  |
+| FP16               | 16        | 1 / 5 / 10     | Narrow exponent, needs loss scaling in training                             |
+| BF16               | 16        | 1 / 8 / 7      | FP32's range with a shorter mantissa, no loss scaling, the training default |
+| FP8 E4M3           | 8         | 1 / 4 / 3      | More precision, less range, used for weights and forward activations        |
+| FP8 E5M2           | 8         | 1 / 5 / 2      | More range, less precision, used for gradients                              |
+| FP6 / FP4 (E2M1)   | 6 / 4     | 1 / 2 / 1      | Emerging on Blackwell-class hardware, still floating point                  |
+| INT8 / INT4 / INT2 | 8 / 4 / 2 | fixed point    | INT8 mainstream, INT4 is where the 4-bit zoo lives, INT2 mostly research    |
 
 Two things worth understanding beyond the table.
 
-**Integer vs float at the same bit-width.** INT8 spaces its levels evenly. FP8 spaces them unevenly, dense near zero and sparse out in the tails, because of the exponent. That makes FP8 naturally better at swallowing outliers, which is a big reason it became the go-to *serving* format on H100-class hardware: near-INT8 memory savings, much less outlier pain, and native FP8 tensor cores so the math is genuinely faster too.
+**1) Integer vs float at the same bit-width:** INT8 spaces its levels evenly. FP8 spaces them unevenly, dense near zero and sparse out in the tails, because of the exponent. That makes FP8 naturally better at swallowing outliers, which is a big reason it became the go-to *serving* format on H100-class hardware: near-INT8 memory savings, much less outlier pain, and native FP8 tensor cores so the math is genuinely faster too.
 
-**MX / microscaling formats.** The newer OCP "MX" formats (MXFP8, MXFP6, MXFP4) are per-block by design: a block of 32 elements shares one tiny power-of-two scale, and each element is a small float like FP4. This is basically per-group quantization baked into the number format and supported directly in hardware. It is where Blackwell-era low-precision inference is heading.
+**2) MX / microscaling formats:** The newer OCP "MX" formats (MXFP8, MXFP6, MXFP4) are per-block by design: a block of 32 elements shares one tiny power-of-two scale, and each element is a small float like FP4. This is basically per-group quantization baked into the number format and supported directly in hardware. It is where Blackwell-era low-precision inference is heading.
 
-### NF4: a grid shaped like the weights
+### **NF4: a grid shaped like the weights**
 
 NF4 (NormalFloat4), from the QLoRA paper, starts from one observation: trained weights are roughly a bell curve centered on zero. A uniform 4-bit grid wastes slots out in the tails where almost no weights live, and is too coarse near zero where most of them cluster. NF4 instead puts its 16 levels at the **quantiles of a standard normal**, so each slot holds an equal *slice of probability* rather than an equal slice of the number line, more resolution where the weights actually are. The 16 codebook values are:
 
-$$
-q_i = \frac{1}{2}\Big[Q\!\left(\tfrac{i}{17}\right) + Q\!\left(\tfrac{i+1}{17}\right)\Big], \qquad i = 0, \dots, 15
+$$  
+q_i = \frac{1}{2}\Big[Q\left(\tfrac{i}{17}\right) + Q\left(\tfrac{i+1}{17}\right)\Big], \qquad i = 0, \dots, 15  
 $$
 
 where $Q$ is the quantile function (inverse CDF) of $N(0,1)$. In words: cut the bell curve into 17 equal-probability slices and take the midpoint of each. This is provably optimal for normally-distributed data. QLoRA pairs it with per-block normalization and double quantization (see granularity above).
 
 ### Ternary and binary: as low as it goes
 
-BitNet b1.58 pushes weights down to just three values, $\{-1, 0, +1\}$, using an absolute-mean scale:
+BitNet b1.58 pushes weights down to just three values, $-1, 0, +1$, using an absolute-mean scale:
 
-$$
-Q_w(W) = \Delta \cdot \text{RoundClip}\!\left(\frac{W}{\Delta + \epsilon}, -1, 1\right), \qquad \Delta = \text{mean}(|W|)
+$$  
+Q_w(W) = \Delta \cdot \text{RoundClip}\left(\frac{W}{\Delta + \epsilon}, -1, 1\right), \qquad \Delta = \text{mean}(|W|)  
 $$
 
 with $\text{RoundClip}(x, a, b) = \max(a, \min(b, \text{round}(x)))$ and $\epsilon$ a small guard against dividing by zero. Three states need $\log_2 3 \approx 1.58$ bits, hence the name. The catch: BitNet is not a squeeze of an existing model. It is trained at this precision from scratch (QAT, below), because you simply cannot take a normally-trained model down to ternary after the fact without it falling apart. Pure 1-bit (binary) is the original BitNet and is still mostly research.
@@ -282,14 +284,14 @@ The plain idea first: quantize the weights one column at a time, and after each 
 
 More precisely, GPTQ treats each layer as a least-squares problem. Given calibration inputs $X$ and weights $W$, it wants the quantized $\hat W$ whose *output* is closest to the original:
 
-$$
-\hat{W} = \arg\min_{\hat{W}} \; \|WX - \hat{W}X\|_2^2
+$$  
+\hat{W} = \arg\min_{\hat{W}}  WX - \hat{W}X_2^2  
 $$
 
 To know how to compensate, it uses the layer's Hessian $H = 2XX^\top$, which measures how sensitive the output is to each weight and how the weights interact. This comes from an older pruning method (Optimal Brain Surgeon) adapted to quantization (Optimal Brain Quantization, OBQ). The per-weight update and the error it costs are:
 
-$$
-\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]_{qq}}\, H^{-1}_{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}
+$$  
+\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]*{qq}} H^{-1}*{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
 $$
 
 You do not need to memorize that. The point is: $\delta$ is the correction spread across the remaining weights, and $\varepsilon_q$ is how much error this weight costs. OBQ is accurate but far too slow at billions of parameters, so GPTQ makes three practical simplifications:
@@ -317,8 +319,8 @@ AWQ starts from a sharp observation: fewer than 1% of weight channels really dri
 
 Protecting them costs nothing, thanks to a simple trick. In a matmul $Y = XW$ you can scale a weight channel *up* and scale the matching input *down* by the same factor, and the output is unchanged:
 
-$$
-Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)
+$$  
+Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)  
 $$
 
 But the scaled-up weights now suffer *less* rounding error, because a fixed step size is a smaller fraction of a bigger number. AWQ finds the per-channel scale $s = (\bar{|X|})^\alpha$ by a quick search over $\alpha \in [0,1]$. The best part: the activation-side scaling is folded into the previous layer at export time, so it adds zero runtime cost and stores nothing in mixed precision. It just quantizes 4-bit weights that were pre-scaled to protect the important ones. That is why AWQ is fast to apply and holds quality, and why it shows up everywhere.
@@ -327,8 +329,8 @@ But the scaled-up weights now suffer *less* rounding error, because a fixed step
 
 GPTQ and AWQ are weight-only (W4A16). SmoothQuant goes after the harder prize, full **W8A8**, where activations are quantized too so you get a genuine integer matmul for compute-heavy serving. The obstacle is those activation outliers again. Weights are flat and easy; activations have the few monster channels. SmoothQuant uses the same scale-shifting trick as AWQ, but aimed the other way: it smooths the activations by pushing some of their range into the weights, which tolerate it better.
 
-$$
-s_j = \frac{\max(|X_j|)^\alpha}{\max(|W_j|)^{1-\alpha}}, \qquad Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)
+$$  
+s_j = \frac{\max(|X_j|)^\alpha}{\max(|W_j|)^{1-\alpha}}, \qquad Y = \big(X \cdot \text{diag}(s)^{-1}\big)\big(\text{diag}(s) \cdot W\big)  
 $$
 
 The exponent $\alpha$ controls how much difficulty moves; $\alpha = 0.5$ is the usual sweet spot, which simplifies to $s_j = \sqrt{\max(|X_j|)/\max(|W_j|)}$. The one-liner to keep them straight: **AWQ** protects salient weights for memory savings (weight-only), **SmoothQuant** rebalances weights and activations for throughput (W8A8).
@@ -353,14 +355,14 @@ If you have run a model on your laptop via Ollama or LM Studio, you have used th
 
 The names look cryptic but decode simply. `Q4_0` / `Q4_1` are the old flat formats. The `_K` formats are k-quants, and the `_S` / `_M` / `_L` suffix says how much mixed precision they use: `_M` and `_L` keep a few error-sensitive tensors at higher bit-width. `Q4_K_M` sits around 4.8 bits per weight and is the default "good for almost everything" pick.
 
-| Quant | ~bits/weight | Quality vs FP16 | When you reach for it |
-|---|---|---|---|
-| `Q8_0` | ~8.5 | Essentially lossless | You have the VRAM and want zero risk |
-| `Q6_K` | ~6.6 | Very small loss | High-quality local inference |
-| `Q5_K_M` | ~5.7 | Small loss | Good balance on mid-range hardware |
-| `Q4_K_M` | ~4.8 | Noticeable but usually fine | The default for most local setups |
-| `Q3_K_M` | ~3.9 | Real degradation | Tight VRAM |
-| `Q2_K` | ~2.6 | Significant | Last resort when nothing else fits |
+| Quant    | ~bits/weight | Quality vs FP16             | When you reach for it                |
+| -------- | ------------ | --------------------------- | ------------------------------------ |
+| `Q8_0`   | ~8.5         | Essentially lossless        | You have the VRAM and want zero risk |
+| `Q6_K`   | ~6.6         | Very small loss             | High-quality local inference         |
+| `Q5_K_M` | ~5.7         | Small loss                  | Good balance on mid-range hardware   |
+| `Q4_K_M` | ~4.8         | Noticeable but usually fine | The default for most local setups    |
+| `Q3_K_M` | ~3.9         | Real degradation            | Tight VRAM                           |
+| `Q2_K`   | ~2.6         | Significant                 | Last resort when nothing else fits   |
 
 Basic k-quants need no calibration, so you can convert a model in minutes with nothing but the checkpoint. The higher-quality path uses an imatrix from calibration data and does measurably better at the low end.
 
@@ -374,14 +376,14 @@ Everything above works on a frozen model. QAT instead *trains the model to expec
 
 QAT inserts a "fake quantize" step into the forward pass, the same round-clip-dequantize you have seen, so the model computes with the rounded weights $\tilde W$ while the parameter you optimize stays full-precision $W$:
 
-$$
-\tilde{W} = S\Big(\text{clip}\big(\text{round}(W/S) + Z,\; q_{min}, q_{max}\big) - Z\Big)
+$$  
+\tilde{W} = S\Big(\text{clip}\big(\text{round}(W/S) + Z, q_{min}, q_{max}\big) - Z\Big)  
 $$
 
 The problem: $\text{round}(\cdot)$ is a flat staircase, so its gradient is zero almost everywhere and backprop has nothing to push on. The **straight-through estimator (STE)** cheats: on the backward pass it pretends the rounding was just the identity function (as long as the value is inside the range):
 
-$$
-\frac{\partial L}{\partial W} \approx \frac{\partial L}{\partial \tilde{W}} \cdot \mathbb{1}[\alpha \le W \le \beta]
+$$  
+\frac{\partial L}{\partial W} \approx \frac{\partial L}{\partial \tilde{W}} \cdot \mathbb{1}[\alpha \le W \le \beta]  
 $$
 
 > **Why does such a crude cheat work?** Because rounding is a small nudge, and for most values $\text{round}(x)$ is close to $x$. Treating it as the identity lets gradients flow, and the optimizer ends up parking weights in positions that survive rounding, which was the goal all along. You are not trying to differentiate the staircase, you are nudging weights to where the staircase does not hurt.
@@ -473,13 +475,13 @@ python convert_hf_to_gguf.py <hf_model_dir> --outfile model-f16.gguf
 
 For serving, **vLLM** and **TensorRT-LLM** load GPTQ / AWQ / FP8 checkpoints directly and run them at scale, and TensorRT-LLM is where you would do INT8 / FP8 W8A8 with SmoothQuant-style calibration for maximum throughput.
 
-| Tool | Format | Needs calibration? | Best for |
-|---|---|---|---|
-| bitsandbytes | INT8 / NF4 | No | QLoRA fine-tuning, quick 4-bit or 8-bit loads |
-| AutoGPTQ / GPTQModel | GPTQ INT4 | Yes | GPU-served W4A16 inference |
-| AutoAWQ | AWQ INT4 | Yes (light) | GPU-served W4A16, fast to apply, holds quality |
-| llama.cpp | GGUF k-quants | Optional (imatrix) | Local / CPU / Apple Silicon / edge |
-| TensorRT-LLM / vLLM | FP8 / INT8 / INT4 | Depends | Production GPU serving, W8A8 throughput |
+| Tool                 | Format            | Needs calibration? | Best for                                       |
+| -------------------- | ----------------- | ------------------ | ---------------------------------------------- |
+| bitsandbytes         | INT8 / NF4        | No                 | QLoRA fine-tuning, quick 4-bit or 8-bit loads  |
+| AutoGPTQ / GPTQModel | GPTQ INT4         | Yes                | GPU-served W4A16 inference                     |
+| AutoAWQ              | AWQ INT4          | Yes (light)        | GPU-served W4A16, fast to apply, holds quality |
+| llama.cpp            | GGUF k-quants     | Optional (imatrix) | Local / CPU / Apple Silicon / edge             |
+| TensorRT-LLM / vLLM  | FP8 / INT8 / INT4 | Depends            | Production GPU serving, W8A8 throughput        |
 
 ---
 
@@ -505,8 +507,8 @@ You have to check the damage, and check it the right way, because the easy metri
 
 **KL divergence** between the full-precision and quantized model's output distributions is the sharpest task-agnostic check:
 
-$$
-D_{KL}\big(P_{fp16} \,\|\, P_{quant}\big) = \sum_i P_{fp16}(i)\, \log\frac{P_{fp16}(i)}{P_{quant}(i)}
+$$  
+D_{KL}\big(P_{fp16}  P_{quant}\big) = \sum_i P_{fp16}(i) \log\frac{P_{fp16}(i)}{P_{quant}(i)}  
 $$
 
 computed per-token over a held-out set. It catches distribution drift that a single averaged perplexity number smears over: if the quantized model is putting its probability mass in noticeably different places, this sees it even when perplexity does not move.
@@ -527,18 +529,18 @@ The differences from the LLM case are instructive. Vision models are mostly comp
 
 # One table to bookmark
 
-| Method / Format | Bits (WxAy) | Memory vs FP16 | Quality | PTQ/QAT | Calibration? | Best for |
-|---|---|---|---|---|---|---|
-| BF16 / FP16 | 16 | baseline | reference | n/a | n/a | Training, max fidelity |
-| FP8 (E4M3) | W8A8 | ~2x smaller | Very high | PTQ | Light | GPU serving on Hopper+ |
-| LLM.int8() | W8A16 | ~2x smaller | Near-lossless | PTQ | No | Easy 8-bit loads, memory |
-| SmoothQuant | W8A8 | ~2x smaller | High | PTQ | Yes | Compute-bound INT8 serving |
-| GPTQ | W4A16 | ~4x smaller | High | PTQ | Yes | GPU-served 4-bit decode |
-| AWQ | W4A16 | ~4x smaller | High | PTQ | Yes (light) | GPU-served 4-bit, fast to apply |
-| GGUF `Q4_K_M` | ~W4.8A16 | ~3.3x smaller | Good | PTQ | Optional | Local / CPU / edge |
-| NF4 (QLoRA) | W4A16 | ~4x smaller | Good, great w/ LoRA | PTQ | No | Cheap fine-tuning on one GPU |
-| SpQR / QuIP# / AQLM | ~W2-3A16 | ~5-8x smaller | Frontier | PTQ | Yes | Squeezing below 4-bit |
-| Ternary (BitNet) | ~1.58-bit | ~10x smaller | Model-dependent | QAT (native) | n/a | Extreme compression from scratch |
+| Method / Format     | Bits (WxAy) | Memory vs FP16 | Quality             | PTQ/QAT      | Calibration? | Best for                         |
+| ------------------- | ----------- | -------------- | ------------------- | ------------ | ------------ | -------------------------------- |
+| BF16 / FP16         | 16          | baseline       | reference           | n/a          | n/a          | Training, max fidelity           |
+| FP8 (E4M3)          | W8A8        | ~2x smaller    | Very high           | PTQ          | Light        | GPU serving on Hopper+           |
+| LLM.int8()          | W8A16       | ~2x smaller    | Near-lossless       | PTQ          | No           | Easy 8-bit loads, memory         |
+| SmoothQuant         | W8A8        | ~2x smaller    | High                | PTQ          | Yes          | Compute-bound INT8 serving       |
+| GPTQ                | W4A16       | ~4x smaller    | High                | PTQ          | Yes          | GPU-served 4-bit decode          |
+| AWQ                 | W4A16       | ~4x smaller    | High                | PTQ          | Yes (light)  | GPU-served 4-bit, fast to apply  |
+| GGUF `Q4_K_M`       | ~W4.8A16    | ~3.3x smaller  | Good                | PTQ          | Optional     | Local / CPU / edge               |
+| NF4 (QLoRA)         | W4A16       | ~4x smaller    | Good, great w/ LoRA | PTQ          | No           | Cheap fine-tuning on one GPU     |
+| SpQR / QuIP# / AQLM | ~W2-3A16    | ~5-8x smaller  | Frontier            | PTQ          | Yes          | Squeezing below 4-bit            |
+| Ternary (BitNet)    | ~1.58-bit   | ~10x smaller   | Model-dependent     | QAT (native) | n/a          | Extreme compression from scratch |
 
 ---
 
