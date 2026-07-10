@@ -222,3 +222,88 @@ def reflexion(task, actor, evaluator, reflect, max_trials=5):
 The clever bit is that `memory` carries *across attempts*. Trial 1 fails and produces a lesson; trial 2 reads that lesson and avoids the same mistake, maybe failing in a new way and adding a second lesson; and so on. It's trial-and-error, but the "error signal" is a paragraph of self-critique instead of a gradient.
 
 It works well precisely where a plain agent gets stuck in a loop repeating the same mistake. Reflexion showed big gains across three very different kinds of tasks, decision-making (AlfWorld), reasoning (HotPotQA), and coding (it hit **91% pass@1 on HumanEval**, beating the base model by a wide margin), all without touching the model's weights.
+
+## LATS: Language Agent Tree Search Unifies Reasoning, Acting, and Planning
+
+Published: 2023-10-06 | [https://arxiv.org/abs/2310.04406](https://arxiv.org/abs/2310.04406)
+
+Reflexion fixes an agent that keeps making the *same* mistake, but it's still fundamentally linear: try the whole episode once, fail, write a lesson, try the whole episode again from scratch. There's no branching, no lookahead, and no way to back out of a bad decision made three steps ago without redoing everything. Tree of Thoughts (ToT) does have branching, it searches over a tree of candidate reasoning paths, but it only ever searches over *thoughts* in the model's head, it never actually calls tools or touches a real environment to see what happens. LATS's pitch is: what if an agent could do both at once, search a tree of *actions* (not just thoughts), where each branch actually executes in the real environment and comes back with a real observation, and use that to plan properly instead of committing to one path and hoping?
+
+The mechanism they bolt on is **Monte Carlo Tree Search (MCTS)**, the same algorithm behind AlphaGo, repurposed so an LLM plays three roles at once: the **policy** (proposes actions), the **value function** (scores how promising a state is), and the **reflector** (explains why a branch failed). Each node in the tree is a full trajectory so far, the input plus every action taken and observation received. MCTS runs its usual four phases, just with an LLM standing in for the parts that used to require a trained network:
+
+- **Select** - starting at the root, walk down the tree picking the child with the best UCT score (an LLM-estimated value, plus a bonus for under-explored nodes) until you hit a leaf that hasn't been expanded yet.
+- **Expand** - ask the LLM (acting like a ReAct agent) to propose several different next actions from that leaf, each one becomes a new child node. This is the actual branching, instead of committing to one action per step like ReAct does.
+- **Evaluate** - for each new child, ask the LLM to look at the trajectory so far and self-score it (e.g. "how promising does this path look, 1-10?"). This value estimate replaces the learned value network that classic MCTS needs, no training required.
+- **Simulate** - roll one of the promising children forward, actually executing actions in the real environment, until you hit a terminal state (task solved/failed) or a depth limit, collecting real observations and a real reward along the way.
+- **Reflect** - if the rollout ends in failure, don't just throw the branch away, ask the LLM to write a short reflection on *why* this path didn't work, the same self-critique idea as Reflexion. That reflection gets attached to the failed node and is shown to the LLM the next time it expands anywhere near that part of the tree, so the search doesn't keep re-exploring the same dead end.
+- **Backpropagate** - push the reward/value back up through every ancestor of the node, updating their statistics so future `select` steps make better decisions about which branch to go down.
+
+```
+                                    root (task)
+                                       │
+                     ┌─────────────────┼─────────────────┐
+               action A            action B            action C
+             value: 0.3          value: 0.8           value: 0.2   ← LLM self-evaluates each
+                 │                    │
+            (pruned, low         ┌────┼────┐
+             value + a               ...  simulate further down
+             failed reflection        this branch, actually
+             attached)                calling tools/env
+                                       │
+                                terminal: reward = 1 (solved)
+                                       │
+                          backpropagate reward up through
+                          every ancestor's statistics
+```
+
+Here's roughly the loop in pseudo code:
+
+```python
+def lats(task, llm, environment, n_iterations=30):
+    root = Node(state=task)
+
+    for _ in range(n_iterations):
+        node = root
+        # SELECT: walk down existing tree via UCT until an unexpanded leaf
+        while node.children:
+            node = max(node.children, key=lambda c: uct_score(c))
+
+        # EXPAND: LLM proposes several candidate next actions (branching)
+        if not node.is_terminal:
+            candidate_actions = llm.propose_actions(node.state, n=5)
+            for action in candidate_actions:
+                node.children.append(Node(state=node.state, action=action))
+
+        # EVALUATE: LLM self-scores each new child's promise
+        for child in node.children:
+            child.value = llm.evaluate(child.state)
+
+        # SIMULATE: actually execute the best-looking child in the real env
+        best_child = max(node.children, key=lambda c: c.value)
+        observation, reward, done = environment.step(best_child.action)
+        best_child.state = best_child.state.append(best_child.action, observation)
+
+        # REFLECT: turn a failed rollout into a lesson for this branch
+        if done and reward == 0:
+            best_child.reflection = llm.reflect(best_child.state)
+
+        # BACKPROPAGATE: push the outcome back up the path just walked
+        node_ptr = best_child
+        while node_ptr is not None:
+            node_ptr.visits += 1
+            node_ptr.total_reward += reward
+            node_ptr = node_ptr.parent
+
+        if done and reward == 1:
+            return best_child.state                # solved, stop early
+
+    return best_trajectory_found(root)              # best effort after budget
+```
+
+A few things worth calling out:
+
+- The environment call in `simulate` is what separates LATS from Tree of Thoughts. ToT's nodes are just text the model imagined; LATS's nodes carry real tool calls and real observations, so a "good looking" branch that actually fails in the environment gets caught immediately instead of being trusted blindly.
+- Reflections aren't global like in Reflexion, they're **local to a branch**. If action A consistently leads nowhere, the reflection attached there warns the LLM off that specific sub-path next time `select`/`expand` visits it, while other branches stay unaffected.
+- Because search is expensive (every simulate step is a real LLM call plus a real tool call), the UCT formula's exploration bonus matters a lot, it's what stops the search from just hammering the same promising-looking branch over and over and instead makes it occasionally check whether a less-explored branch might actually be better.
+
+The name is literal: it's ReAct-style **acting** (real tool calls, real observations) wrapped inside a tree **search** (MCTS, systematic branching and backtracking) with reflection folded in for **planning** correction, so the agent can both look ahead before committing and learn from a failed branch without restarting the whole task. On GPT-4, LATS pushed HumanEval pass@1 to state-of-the-art, and on GPT-3.5 it roughly doubled ReAct's score on HotPotQA and matched fine-tuned performance on WebShop, all purely through search and prompting, no weight updates.
