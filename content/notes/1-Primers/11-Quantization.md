@@ -274,11 +274,11 @@ That ~17 dB gap, caused by a single bad row, is the whole reason per-channel and
 
 PTQ takes a frozen, already-trained model and quantizes it with no retraining and no gradients through the whole network, in minutes to hours instead of GPU-days. This is where most of the research has gone, because it is what you can actually do to someone else's open-weights checkpoint on one machine.
 
-## LLM.int8(): keep the outliers in FP16
+## 1) LLM.int8(): keep the outliers in FP16
 
 The first method that made 8-bit work for big models, and the cleanest illustration of the outlier idea. It detects the handful of outlier dimensions, pulls those specific columns out, and computes them in FP16, while the other 99%+ of the matmul runs in INT8. The two partial results are added back together. So almost all the compute is 8-bit, but the load-bearing outliers never get squashed. This is exactly what `load_in_8bit=True` does in bitsandbytes. It is nearly lossless, but the FP16 side path means it is mostly a memory win, not always a speed one.
 
-## GPTQ: round using second-order information
+## 2) GPTQ: round using second-order information
 
 The plain idea first: quantize the weights one column at a time, and after each column, **nudge the not-yet-quantized weights to make up for the error you just introduced.** It is like packing a suitcase and, each time you squash one item, shifting the others to keep the overall shape right.
 
@@ -543,8 +543,6 @@ The differences from the LLM case are instructive. Vision models are mostly comp
 | Ternary (BitNet)    | ~1.58-bit   | ~10x smaller   | Model-dependent     | QAT (native) | n/a          | Extreme compression from scratch |
 
 ---
-
-# The mental model
 
 If you forget everything else, keep these:
 
