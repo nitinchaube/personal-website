@@ -280,6 +280,32 @@
 .notes-root .notes-tree-item {
   margin: 0;
 }
+/* Number the top-level entries inside each category box so individual
+   articles are easy to tell apart even when long titles wrap. */
+.notes-root .notes-tree[data-level='0'] {
+  counter-reset: notes-tree-item;
+}
+.notes-root .notes-tree[data-level='0'] > .notes-tree-item {
+  counter-increment: notes-tree-item;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.notes-root .notes-tree[data-level='0'] > .notes-tree-item::before {
+  content: counter(notes-tree-item) '.';
+  color: var(--notes-link);
+  font-family: Charter, 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 1.1em;
+  text-align: right;
+}
+.notes-root .notes-tree[data-level='0'] > .notes-tree-item > .notes-tree-folder {
+  flex: 1;
+  min-width: 0;
+}
 .notes-root .notes-tree-folder {
   margin: 0;
 }
@@ -447,7 +473,8 @@
   margin: 0;
 }
 .notes-root .notes-toc-link {
-  color: var(--notes-link);
+  position: relative;
+  color: var(--notes-text-muted);
   text-decoration: none;
   display: block;
   padding: 3px 0;
@@ -455,13 +482,23 @@
   transition: color 0.15s ease;
 }
 .notes-root .notes-toc-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--notes-text);
 }
 .notes-root .notes-toc-link.is-active {
-  color: var(--notes-text);
+  color: var(--notes-link);
   font-weight: 600;
-  text-decoration: none;
+}
+/* Accent bar drawn over the sublist's left border for the active item */
+.notes-root .notes-toc-group-children .notes-toc-link.is-active::before,
+.notes-root .notes-toc-sublist .notes-toc-link.is-active::before {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--notes-link);
 }
 /* h1 page title */
 .notes-root .notes-toc-item--h1 {
@@ -469,6 +506,89 @@
 }
 .notes-root .notes-toc-item--h1 .notes-toc-link {
   font-weight: 600;
+}
+/* h1 category groups: a collapsible dropdown with its h2 papers nested inside */
+.notes-root .notes-toc-scroll > .notes-toc-list {
+  counter-reset: toc-group;
+}
+.notes-root .notes-toc-item--group {
+  margin-top: 0.35rem;
+}
+/* Number every top-level item except the page title (h1 link) */
+.notes-root .notes-toc-scroll > .notes-toc-list > .notes-toc-item:not(.notes-toc-item--h1) {
+  counter-increment: toc-group;
+}
+.notes-root .notes-toc-group-label::before,
+.notes-root .notes-toc-scroll > .notes-toc-list > .notes-toc-item--section > .notes-toc-section > .notes-toc-section-summary > .notes-toc-link::before,
+.notes-root .notes-toc-scroll > .notes-toc-list > .notes-toc-item--h2 > .notes-toc-link::before,
+.notes-root .notes-toc-scroll > .notes-toc-list > .notes-toc-item--h3 > .notes-toc-link::before,
+.notes-root .notes-toc-scroll > .notes-toc-list > .notes-toc-item--h4 > .notes-toc-link::before {
+  content: counter(toc-group) '.';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--notes-link);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.notes-root .notes-toc-item--group:first-child {
+  margin-top: 0;
+}
+.notes-root .notes-toc-group {
+  margin: 0;
+}
+.notes-root .notes-toc-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 0;
+}
+.notes-root .notes-toc-group-summary::-webkit-details-marker {
+  display: none;
+}
+.notes-root .notes-toc-group-summary::marker {
+  content: '';
+}
+.notes-root .notes-toc-group-summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--notes-text-muted);
+  border-bottom: 1.5px solid var(--notes-text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+.notes-root .notes-toc-group[open] > .notes-toc-group-summary::after {
+  transform: rotate(45deg);
+}
+.notes-root .notes-toc-group-summary:hover::after {
+  border-color: var(--notes-text);
+}
+.notes-root .notes-toc-group-label {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: var(--notes-text);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 2px 0;
+  transition: color 0.15s ease;
+}
+.notes-root .notes-toc-group-label:hover {
+  color: var(--notes-link);
+}
+.notes-root .notes-toc-group-label.is-active {
+  color: var(--notes-link);
+}
+.notes-root .notes-toc-group-children {
+  margin: 2px 0 0 7px;
+  padding-left: 10px;
+  border-left: 1px solid var(--notes-border);
 }
 /* Collapsible h2 sections with nested h3/h4 */
 .notes-root .notes-toc-item--section {
@@ -492,18 +612,22 @@
 .notes-root .notes-toc-section-summary::marker {
   content: '';
 }
-.notes-root .notes-toc-section-summary::before {
+.notes-root .notes-toc-section-summary::after {
   content: '';
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 4px 0 4px 6px;
-  border-color: transparent transparent transparent var(--notes-link);
-  transition: transform 0.15s ease;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid var(--notes-text-muted);
+  border-bottom: 1.5px solid var(--notes-text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease, border-color 0.15s ease;
   flex-shrink: 0;
+  margin-right: 4px;
 }
-.notes-root .notes-toc-section[open] > .notes-toc-section-summary::before {
-  transform: rotate(90deg);
+.notes-root .notes-toc-section[open] > .notes-toc-section-summary::after {
+  transform: rotate(45deg);
+}
+.notes-root .notes-toc-section-summary:hover::after {
+  border-color: var(--notes-text);
 }
 .notes-root .notes-toc-section-summary .notes-toc-link {
   flex: 1;
@@ -530,13 +654,14 @@
   margin-bottom: 0.5rem;
 }
 .notes-root .notes-toc-scroll {
-  /* top-24 (6rem) + heading + page padding */
-  max-height: calc(100vh - 8.5rem);
-  max-height: calc(100dvh - 8.5rem);
+  /* top-24 (6rem) + heading + progress bar + back-to-top + page padding */
+  max-height: calc(100vh - 12rem);
+  max-height: calc(100dvh - 12rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding-right: 0.35rem;
+  scroll-behavior: smooth;
 }
 .notes-root .notes-toc-scroll::-webkit-scrollbar {
   width: 6px;
@@ -547,4 +672,53 @@
 }
 .notes-root .notes-toc-scroll::-webkit-scrollbar-thumb:hover {
   background: #d8d5cd;
+}
+/* Reading progress bar under the "On this page" label */
+.notes-root .notes-toc-progress {
+  height: 2px;
+  background: var(--notes-border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 0 0.75rem;
+}
+.notes-root .notes-toc-progress-fill {
+  height: 100%;
+  background: var(--notes-link);
+  border-radius: 999px;
+  transition: width 0.1s linear;
+}
+/* Back to top */
+.notes-root .notes-toc-top {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--notes-text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.notes-root .notes-toc-top:hover {
+  color: var(--notes-link);
+}
+/* Gentle reveal when a group/section expands */
+.notes-root .notes-toc-group[open] > .notes-toc-group-children,
+.notes-root .notes-toc-section[open] > .notes-toc-sublist {
+  animation: notes-toc-reveal 0.18s ease;
+}
+@keyframes notes-toc-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Anchor jumps land below the sticky header */
+.notes-root .notes-article :is(h1, h2, h3, h4) {
+  scroll-margin-top: 88px;
 }

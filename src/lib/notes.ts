@@ -43,10 +43,12 @@ const NOTES_DIR = path.join(process.cwd(), 'content', 'notes');
 function walkNoteFiles(dir: string, relDir: string = ''): { absPath: string; relPath: string }[] {
   if (!fs.existsSync(dir)) return [];
   const results: { absPath: string; relPath: string }[] = [];
+  // Numeric-aware sort so "4-foo" comes before "10-bar" (plain lexicographic
+  // ordering would put "10" first because "1" < "4").
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     if (entry.name === 'assets') continue;
