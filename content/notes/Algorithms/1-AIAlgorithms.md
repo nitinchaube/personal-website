@@ -1,11 +1,11 @@
 ---
 title: "AI / ML Algorithms"
 date: 2026-06-22
-summary: "Single-source, from-scratch Python + math reference for the ML / DL / AI algorithms you get asked to derive and code in Google-level interviews — classic ML, neural nets, tokenizers, attention (MHA/GQA/MLA/RoPE/MoE), LLM decoding, fine-tuning & alignment (LoRA/RLHF/DPO), embeddings & retrieval, generative models (VAE/GAN/diffusion), metrics and RL (up to PPO)."
+summary: "Single-source, from-scratch Python + math reference for the ML / DL / AI algorithms you get asked to derive and code in Google-level interviews - classic ML, neural nets, tokenizers, attention (MHA/GQA/MLA/RoPE/MoE), LLM decoding, fine-tuning & alignment (LoRA/RLHF/DPO), embeddings & retrieval, generative models (VAE/GAN/diffusion), metrics and RL (up to PPO)."
 tags: [ML, DL, AI, Algorithms, Interview]
 ---
 
-This is my **single source of truth** for ML/DL/AI interview prep. In these interviews you are rarely asked to call `sklearn` or `torch` — you are asked to **derive the math and implement it**: softmax that doesn't overflow, backprop by hand, scaled dot-product attention, top-p sampling, ROC-AUC, gradient boosting.
+This is my **single source of truth** for ML/DL/AI interview prep. In these interviews you are rarely asked to call `sklearn` or `torch` - you are asked to **derive the math and implement it**: softmax that doesn't overflow, backprop by hand, scaled dot-product attention, top-p sampling, ROC-AUC, gradient boosting.
 
 Every block below has: the **formula**, a plain-`numpy` (or pure Python) **implementation**, a tiny **runnable example**, and the **complexity / interview gotcha**. Read top-to-bottom once, then use it as a night-before cheat-sheet.
 
@@ -37,8 +37,10 @@ def sigmoid(z):
     return out
 
 # Example
-print(sigmoid(np.array([-1000., 0., 1000.])))   # [0.  0.5  1.] — no overflow
+print(sigmoid(np.array([-1000., 0., 1000.])))   # [0.  0.5  1.] - no overflow
 ```
+
+---
 
 ## Softmax (the #1 "show me numerical stability" question)
 
@@ -54,11 +56,13 @@ def softmax(x, axis=-1):
     e = np.exp(x)
     return e / np.sum(e, axis=axis, keepdims=True)
 
-# Example — shift invariance
+# Example - shift invariance
 logits = np.array([2.0, 1.0, 0.1])
 print(softmax(logits))            # [0.659  0.242  0.099]
 print(softmax(logits + 1000))     # identical
 ```
+
+---
 
 ## LogSumExp (stable log of a sum of exps)
 
@@ -74,6 +78,8 @@ def logsumexp(x, axis=-1):
 # log(e^1000 + e^1000) = 1000 + log(2), with no overflow
 print(logsumexp(np.array([1000., 1000.])))   # 1000.693...
 ```
+
+---
 
 ## Cross-Entropy Loss (from logits)
 
@@ -94,6 +100,8 @@ labels = np.array([0, 1])
 print(cross_entropy_from_logits(logits, labels))   # 0.385...
 ```
 
+---
+
 ## KL Divergence (how far apart two distributions are)
 
 $$  
@@ -109,6 +117,8 @@ def kl_divergence(p, q, eps=1e-12):
 
 print(round(kl_divergence([0.5, 0.5], [0.9, 0.1]), 4))   # 0.5108
 ```
+
+---
 
 ## Activations & their derivatives (needed for backprop)
 
@@ -126,6 +136,8 @@ def sigmoid_grad(z):
     s = sigmoid(z); return s * (1 - s)
 ```
 
+---
+
 ## Distance / similarity metrics
 
 $$  
@@ -141,6 +153,8 @@ def cosine_similarity(a, b):
 print(cosine_similarity(np.array([1, 0]), np.array([10, 0])))   # 1.0 (direction only)
 ```
 
+---
+
 ## Weight Initialization (Xavier / He)
 
 $$  
@@ -155,6 +169,8 @@ def init_weights(d_in, d_out, mode="he", seed=0):
 ```
 
 *Why it matters: bad init → activations/gradients vanish or explode across layers. He keeps ReLU variance ~1 per layer.*
+
+---
 
 ## Numerical Gradient Checking (verify your backprop)
 
@@ -201,6 +217,8 @@ print(round(gradient_descent(lambda x: 2*(x-3), 0.0, lr=0.1, steps=50), 4))   # 
 
 *Batch = full data per step (stable, slow). SGD = one sample (noisy, fast). Mini-batch = the practical middle.*
 
+---
+
 ## Momentum, RMSProp, Adam
 
 $$  
@@ -240,6 +258,8 @@ for _ in range(100):
 print(np.round(theta, 3))   # ~[3.]
 ```
 
+---
+
 ## Learning-Rate Schedule (linear warmup + cosine decay)
 
 $$  
@@ -260,7 +280,9 @@ def lr_schedule(step, base_lr, warmup, total):
 print([round(lr_schedule(s, 0.1, 100, 1000), 4) for s in (50, 100, 1000)])  # [0.05, 0.1, 0.0]
 ```
 
-*Warmup is essential for Transformers — Adam's early variance estimate is noisy; ramping LR avoids blowing up.*
+*Warmup is essential for Transformers - Adam's early variance estimate is noisy; ramping LR avoids blowing up.*
+
+---
 
 ## AdamW & Gradient Clipping (what actually trains LLMs)
 
@@ -268,7 +290,7 @@ $$
 \text{AdamW: } \theta \leftarrow \theta - \eta\lambda\theta - \frac{\eta\hat m_t}{\sqrt{\hat v_t}+\epsilon}, \qquad \text{clip: } g \leftarrow g\cdot\min\!\left(1, \frac{c}{\lVert g\rVert}\right)  
 $$
 
-The subtlety: plain Adam with L2 penalty is *not* the same as weight decay, because Adam divides the penalty by $\sqrt{\hat v}$ too. **AdamW decouples** decay from the adaptive step — shrink weights by a flat $\eta\lambda$, then take the normal Adam step. This is the default optimizer for basically every Transformer.
+The subtlety: plain Adam with L2 penalty is *not* the same as weight decay, because Adam divides the penalty by $\sqrt{\hat v}$ too. **AdamW decouples** decay from the adaptive step - shrink weights by a flat $\eta\lambda$, then take the normal Adam step. This is the default optimizer for basically every Transformer.
 
 ```python
 class AdamW:
@@ -291,7 +313,7 @@ class AdamW:
 
 opt = AdamW(lr=0.1, wd=0.01); theta = np.array([5.0])
 for _ in range(200): theta = opt.step(theta, grad=2*(theta-3), clip=1.0)
-print(np.round(theta, 2))   # ~[3.] — clipping caps the early giant gradient
+print(np.round(theta, 2))   # ~[3.] - clipping caps the early giant gradient
 ```
 
 *Clipping by global norm (not per-element) tames the occasional exploding-gradient spike that would otherwise NaN a long training run. Typical clip value ~1.0.*
@@ -300,7 +322,7 @@ print(np.round(theta, 2))   # ~[3.] — clipping caps the early giant gradient
 
 # Linear Models
 
-## Linear Regression — Closed Form (Normal Equation)
+## Linear Regression - Closed Form (Normal Equation)
 
 $$  
 \hat\theta = (X^\top X)^{-1} X^\top y, \qquad L = \frac{1}{n}\lVert X\theta - y\rVert^2  
@@ -316,9 +338,11 @@ y = np.array([3, 5, 7, 9], dtype=float)            # y = 2x + 1
 print(np.round(linear_regression_normal_eq(X, y), 3))   # [1. 2.]
 ```
 
-*Closed form is $O(d^3)$ to invert $X^\top X$ — fine for small $d$, use GD when $d$ is large.*
+*Closed form is $O(d^3)$ to invert $X^\top X$ - fine for small $d$, use GD when $d$ is large.*
 
-## Linear Regression — Gradient Descent
+---
+
+## Linear Regression - Gradient Descent
 
 $$  
 \nabla_\theta L = \frac{2}{n} X^\top (X\theta - y)  
@@ -335,13 +359,15 @@ def linear_regression_gd(X, y, lr=0.01, epochs=1000):
 print(np.round(linear_regression_gd(X, y), 2))   # [0.99 2.] -> [1, 2]
 ```
 
+---
+
 ## Logistic Regression (binary classification)
 
 $$  
 p = \sigma(\theta^\top x), \qquad L = -\frac{1}{n}\sum_i \big[y_i \log p_i + (1-y_i)\log(1-p_i)\big], \qquad \nabla_\theta L = \frac{1}{n}X^\top(\hat y - y)  
 $$
 
-The gradient of binary cross-entropy is the same clean form as linear regression — that's not a coincidence (both are GLMs).
+The gradient of binary cross-entropy is the same clean form as linear regression - that's not a coincidence (both are GLMs).
 
 ```python
 def logistic_regression(X, y, lr=0.1, epochs=1000):
@@ -359,6 +385,8 @@ def predict(X, theta, thresh=0.5):
 X = np.array([[-2], [-1], [1], [2]], dtype=float); y = np.array([0, 0, 1, 1])
 print(predict(X, logistic_regression(X, y)))   # [0 0 1 1]
 ```
+
+---
 
 ## Regularization (Ridge L2 / Lasso L1)
 
@@ -391,6 +419,8 @@ print(knn_predict(X_train, y_train, np.array([1.2, 1.1]), k=3))   # 0
 
 *Time: $O(N d)$ per query. Gotcha: must normalize features (distance is scale-sensitive). Curse of dimensionality kills it in high $d$.*
 
+---
+
 ## K-Means Clustering (Lloyd's algorithm)
 
 $$  
@@ -419,6 +449,8 @@ print(np.round(np.sort(c.ravel())[[0, -1]], 1))   # centroids near 0 and 5
 ```
 
 *Gotchas: sensitive to init (use **k-means++**), assumes spherical equal-size clusters, must pick $k$ (elbow/silhouette). It's the hard-assignment special case of GMM.*
+
+---
 
 ## Naive Bayes (Gaussian)
 
@@ -456,6 +488,8 @@ print(GaussianNB().fit(X, y).predict(np.array([[1.1, 1.0]])))   # [0]
 ```
 
 *"Naive" = assumes features conditionally independent given the class. Surprisingly strong baseline for text.*
+
+---
 
 ## Decision Tree (CART)
 
@@ -506,6 +540,8 @@ tree = DecisionTree(2); root = tree.fit(X, y)
 print(tree.predict_one(root, np.array([8.5, 8.5])))   # 1
 ```
 
+---
+
 ## Random Forest (bagging + feature randomness)
 
 Train many trees on **bootstrap** samples (sample $n$ rows with replacement) and average/vote. Decorrelating trees (also random feature subsets per split) reduces variance.
@@ -524,6 +560,8 @@ def rf_predict(trees, X):
 ```
 
 *Bagging reduces **variance** (averaging i.i.d.-ish estimators); each tree is high-variance but the ensemble is stable. Out-of-bag samples give a free validation estimate.*
+
+---
 
 ## AdaBoost (adaptive boosting)
 
@@ -550,13 +588,15 @@ def adaboost(X, y, base_stump, n=10):
 
 *Boosting reduces **bias** (sequentially fixing errors); the opposite emphasis to bagging. Sensitive to label noise/outliers.*
 
-## Gradient Boosting (GBDT — the Kaggle/Google workhorse)
+---
+
+## Gradient Boosting (GBDT - the Kaggle/Google workhorse)
 
 $$  
 F_m(x) = F_{m-1}(x) + \nu h_m(x), \qquad h_m \approx -\frac{\partial L}{\partial F_{m-1}} (\text{= residual } y - F_{m-1} \text{ for MSE})  
 $$
 
-Each new tree fits the **negative gradient** (pseudo-residuals) of the loss — gradient descent in function space.
+Each new tree fits the **negative gradient** (pseudo-residuals) of the loss - gradient descent in function space.
 
 ```python
 def grad_boost(X, y, base_reg_tree, n=20, lr=0.1):
@@ -574,6 +614,8 @@ def gb_predict(f0, trees, X, lr=0.1):
 ```
 
 *XGBoost/LightGBM add 2nd-order (Hessian) info, regularization, and clever histogram splits. Know: shrinkage (`lr`) + many shallow trees > few deep trees.*
+
+---
 
 ## PCA (eigendecomposition of the covariance)
 
@@ -599,9 +641,11 @@ print(np.round(proj.ravel(), 2))   # 1D coords along the diagonal
 
 *SVD is the numerically preferred route: `U, S, Vt = np.linalg.svd(X_centered)`; components are rows of `Vt`. Explained variance ratio $= \lambda_k / \sum \lambda$.*
 
-## LDA (Linear Discriminant Analysis — supervised projection)
+---
 
-Where PCA finds directions of max **variance** (unsupervised), LDA finds directions that best **separate labeled classes** — maximize between-class scatter $S_B$ relative to within-class scatter $S_W$:
+## LDA (Linear Discriminant Analysis - supervised projection)
+
+Where PCA finds directions of max **variance** (unsupervised), LDA finds directions that best **separate labeled classes** - maximize between-class scatter $S_B$ relative to within-class scatter $S_W$:
 
 $$  
 \max_w \frac{w^\top S_B w}{w^\top S_W w} \;\Rightarrow\; \text{top eigenvectors of } S_W^{-1}S_B  
@@ -622,10 +666,12 @@ def lda_fit(X, y):
 X = np.r_[np.random.default_rng(0).normal([0,0], 0.3, (20,2)),
           np.random.default_rng(1).normal([4,4], 0.3, (20,2))]
 y = np.array([0]*20 + [1]*20)
-print(lda_fit(X, y).shape)   # (2, 2) — project onto column 0 for best class separation
+print(lda_fit(X, y).shape)   # (2, 2) - project onto column 0 for best class separation
 ```
 
-*At most $C-1$ useful discriminants for $C$ classes. Doubles as a (Gaussian, shared-covariance) classifier — the generative cousin of logistic regression.*
+*At most $C-1$ useful discriminants for $C$ classes. Doubles as a (Gaussian, shared-covariance) classifier - the generative cousin of logistic regression.*
+
+---
 
 ## t-SNE / UMAP (non-linear visualization)
 
@@ -639,10 +685,12 @@ def tsne_affinities(X, sigma=1.0):
     P /= P.sum(axis=1, keepdims=True)
     return (P + P.T) / (2 * len(X))                    # symmetrize
 # Low-dim side uses a heavy-tailed Student-t kernel; minimize KL(P || Q) by GD on the 2-D coords.
-print(np.round(tsne_affinities(X).sum(), 3))   # 1.0 — it's a probability distribution
+print(np.round(tsne_affinities(X).sum(), 3))   # 1.0 - it's a probability distribution
 ```
 
-*Gotchas: distances/cluster sizes between clusters are **not** meaningful, perplexity (≈ effective neighbor count) changes the picture a lot, and it's for viz — not a feature transform you feed downstream. Prefer UMAP at scale.*
+*Gotchas: distances/cluster sizes between clusters are **not** meaningful, perplexity (≈ effective neighbor count) changes the picture a lot, and it's for viz - not a feature transform you feed downstream. Prefer UMAP at scale.*
+
+---
 
 ## SVM (linear, hinge loss + sub-gradient descent)
 
@@ -672,6 +720,8 @@ print(np.sign(X @ w + b))   # [1. 1. -1. -1.]
 
 *Kernel trick (RBF $k(x,x')=e^{-\gamma\lVert x-x'\rVert^2}$) learns non-linear boundaries without explicit feature maps. Only support vectors (margin points) define the boundary.*
 
+---
+
 ## EM for Gaussian Mixture Models (soft K-Means)
 
 $$  
@@ -700,9 +750,11 @@ print(np.round(np.sort(mu), 1))   # ~[0. 5.]
 
 *EM never decreases the log-likelihood (monotone). E-step = soft assignment; M-step = weighted MLE.*
 
+---
+
 ## DBSCAN (density-based clustering)
 
-Grows clusters from **core points** (≥ `min_pts` neighbors within `eps`). Finds arbitrary shapes and labels outliers as noise — no need to pick $k$.
+Grows clusters from **core points** (≥ `min_pts` neighbors within `eps`). Finds arbitrary shapes and labels outliers as noise - no need to pick $k$.
 
 ```python
 def dbscan(X, eps, min_pts):
@@ -729,9 +781,11 @@ print(len(set(dbscan(X, eps=0.7, min_pts=3)) - {-1}))   # 2 clusters
 
 *Strength: non-spherical clusters + outlier detection. Weakness: one global `eps` struggles with varying density.*
 
+---
+
 ## Hierarchical (Agglomerative) Clustering
 
-Start with every point its own cluster, then repeatedly **merge the two closest clusters** until you hit the target count. The full merge history is a dendrogram you can cut at any level — no need to fix $k$ up front.
+Start with every point its own cluster, then repeatedly **merge the two closest clusters** until you hit the target count. The full merge history is a dendrogram you can cut at any level - no need to fix $k$ up front.
 
 ```python
 def agglomerative(X, n_clusters):
@@ -756,6 +810,8 @@ print(len(set(agglomerative(X, 2))))   # 2
 ```
 
 *Linkage choice matters: **single** (min) finds stringy clusters and chains, **complete** (max) makes compact ones, **Ward** minimizes variance (most K-Means-like). Naive cost is $O(n^3)$; $O(n^2\log n)$ with a heap.*
+
+---
 
 ## Isolation Forest (anomaly detection)
 
@@ -785,7 +841,7 @@ print(round(iforest_score(np.array([0., 0]), Xi), 2),   # inlier, lower
       round(iforest_score(np.array([10., 10]), Xi), 2))  # outlier, higher
 ```
 
-*Linear time, no distance metric, no density assumption — scales to high-D far better than DBSCAN/KNN-based detectors. Score > 0.5 leans anomalous.*
+*Linear time, no distance metric, no density assumption - scales to high-D far better than DBSCAN/KNN-based detectors. Score > 0.5 leans anomalous.*
 
 ---
 
@@ -825,10 +881,12 @@ class TwoLayerNet:
 X = np.array([[0,0],[0,1],[1,0],[1,1]], dtype=float); y = np.array([0, 1, 1, 0])  # XOR
 net = TwoLayerNet(2, 8, 2)
 for _ in range(2000): net.forward(X); net.backward(y, lr=0.5)
-print(np.argmax(net.forward(X), axis=1))   # [0 1 1 0] — solved the non-linear XOR
+print(np.argmax(net.forward(X), axis=1))   # [0 1 1 0] - solved the non-linear XOR
 ```
 
-## Autograd Micro-Engine (reverse-mode, scalar — "build backprop")
+---
+
+## Autograd Micro-Engine (reverse-mode, scalar - "build backprop")
 
 Each `Value` records its parents and a local `_backward`. We topologically sort the graph and apply the chain rule in reverse. This is the heart of PyTorch in ~30 lines.
 
@@ -875,6 +933,8 @@ e.backward()
 print(round(a.grad, 5), round(b.grad, 5))   # gradients of e w.r.t. a, b
 ```
 
+---
+
 ## Batch Norm & Layer Norm
 
 $$  
@@ -895,11 +955,13 @@ def layer_norm(X, gamma, beta, eps=1e-5):
 print(np.round(layer_norm(np.array([[1., 2., 3.], [4., 5., 6.]]), 1.0, 0.0), 2))
 ```
 
-*Gotcha: BatchNorm behaves differently in train vs eval (uses running stats at inference); LayerNorm doesn't — hence LLMs use LayerNorm/RMSNorm.*
+*Gotcha: BatchNorm behaves differently in train vs eval (uses running stats at inference); LayerNorm doesn't - hence LLMs use LayerNorm/RMSNorm.*
+
+---
 
 ## RMSNorm (what LLaMA/most modern LLMs actually use)
 
-LayerNorm subtracts the mean *and* divides by std. RMSNorm drops the mean-centering and the bias — just rescale by the root-mean-square. Cheaper, and empirically the centering wasn't doing much:
+LayerNorm subtracts the mean *and* divides by std. RMSNorm drops the mean-centering and the bias - just rescale by the root-mean-square. Cheaper, and empirically the centering wasn't doing much:
 
 $$  
 \text{RMSNorm}(x) = \gamma \cdot \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}}  
@@ -913,6 +975,8 @@ print(np.round(rms_norm(np.array([1., 2., 3.]), 1.0), 3))   # [0.463 0.926 1.389
 ```
 
 *One fewer reduction and no learned bias → a measurable speedup at LLM scale for no quality loss. This is why LLaMA, Mistral, Gemma all ship RMSNorm.*
+
+---
 
 ## Dropout (inverted)
 
@@ -931,6 +995,8 @@ def dropout(X, p=0.5, training=True, seed=None):
 
 print(dropout(np.ones((1, 6)), p=0.5, seed=0))   # ~half zeroed, rest scaled to 2.0
 ```
+
+---
 
 ## Label Smoothing (don't let the model get overconfident)
 
@@ -952,6 +1018,8 @@ print(round(label_smoothed_ce(np.array([[2., 0.5, 0.1]]), np.array([0])), 3))   
 ```
 
 *Used in the original Transformer and most image classifiers. Trade-off: slightly worse raw accuracy, better calibration and downstream robustness.*
+
+---
 
 ## Convolution 2D (single channel)
 
@@ -977,7 +1045,9 @@ sobel = np.array([[-1,1],[-1,1]], dtype=float)
 print(conv2d(img, sobel))   # high response at the 0->1 edge
 ```
 
-*Know the output-size formula cold — it's a frequent quick-fire question. Params per conv layer: $(K\cdotK\cdotC_{in}+1)\cdot C_{out}$.*
+*Know the output-size formula cold - it's a frequent quick-fire question. Params per conv layer: $(K\cdotK\cdotC_{in}+1)\cdot C_{out}$.*
+
+---
 
 ## RNN cell & LSTM cell
 
@@ -1015,13 +1085,13 @@ def gru_cell(x_t, h_prev, p):
     return (1 - u) * h_prev + u * cand                # blend old state & candidate
 ```
 
-*Why LSTM beats vanilla RNN: the **additive** cell-state path lets gradients flow without vanishing — the answer to "why do RNNs struggle with long sequences?". GRU merges the forget/input gates into one update gate and drops the separate cell state: fewer parameters, often the same accuracy, slightly faster.*
+*Why LSTM beats vanilla RNN: the **additive** cell-state path lets gradients flow without vanishing - the answer to "why do RNNs struggle with long sequences?". GRU merges the forget/input gates into one update gate and drops the separate cell state: fewer parameters, often the same accuracy, slightly faster.*
 
 ---
 
 # Tokenizers
 
-Before any model sees a single float, raw text has to become integers. *Which* subword algorithm you use decides vocab size, sequence length, and whether "unknown token" can even exist — a surprisingly deep interview topic in its own right.
+Before any model sees a single float, raw text has to become integers. *Which* subword algorithm you use decides vocab size, sequence length, and whether "unknown token" can even exist - a surprisingly deep interview topic in its own right.
 
 ## Word vs. Character vs. Subword
 
@@ -1029,7 +1099,9 @@ Before any model sees a single float, raw text has to become integers. *Which* s
 - **Character-level:** tiny vocab, zero OOV, but sequences explode in length (attention is $O(n^2)$, so this hurts a lot) and each token carries little meaning.
 - **Subword (the modern default):** frequent words stay whole, rare words split into meaningful pieces (`unhappiness` → `un`, `happi`, `ness`). Best of both: bounded vocab, bounded sequence length, no OOV.
 
-## Byte-Pair Encoding (BPE) — the GPT-2/3 tokenizer
+---
+
+## Byte-Pair Encoding (BPE) - the GPT-2/3 tokenizer
 
 Start from characters; greedily merge the **most frequent adjacent pair** into a new symbol, repeat for a fixed number of merges. Encoding a new word just replays the learned merges in order.
 
@@ -1064,12 +1136,14 @@ def bpe_encode(word, merges):
     return tokens
 
 merges = bpe_train(["low", "lower", "lowest", "newest", "wider"], num_merges=6)
-print(bpe_encode("lowest", merges))   # ['lowe', 'st</w>'] — subword split, not a full re-tokenization
+print(bpe_encode("lowest", merges))   # ['lowe', 'st</w>'] - subword split, not a full re-tokenization
 ```
 
-*Time: $O(\text{merges}\cdot|\text{corpus}|)$ to train, $O(|\text{merges}|)$ to encode a word. Frequency-greedy, not likelihood-optimal — that's what Unigram fixes below.*
+*Time: $O(\text{merges}\cdot|\text{corpus}|)$ to train, $O(|\text{merges}|)$ to encode a word. Frequency-greedy, not likelihood-optimal - that's what Unigram fixes below.*
 
-## WordPiece — the BERT tokenizer
+---
+
+## WordPiece - the BERT tokenizer
 
 Same merge-based skeleton as BPE, but scores pairs by **likelihood gain** instead of raw frequency, so it doesn't just glue together two very common symbols:
 
@@ -1080,7 +1154,7 @@ $$
 ```python
 def wordpiece_score(vocab_pairs_freq, freq):
     # picks the pair whose *joint* frequency is high relative to its parts'
-    # individual frequencies — favors merges that are more than coincidence.
+    # individual frequencies - favors merges that are more than coincidence.
     return {pair: f / (freq[pair[0]] * freq[pair[1]]) for pair, f in vocab_pairs_freq.items()}
 ```
 
@@ -1106,11 +1180,13 @@ vocab = {"play", "##ing", "##er", "un", "##happy"}
 print(wordpiece_encode("playing", vocab))   # ['play', '##ing']
 ```
 
-*Gotcha: unlike byte-level BPE, classic WordPiece is defined over characters, so an out-of-vocab character can still produce `[UNK]` — this is exactly why GPT moved to byte-level BPE.*
+*Gotcha: unlike byte-level BPE, classic WordPiece is defined over characters, so an out-of-vocab character can still produce `[UNK]` - this is exactly why GPT moved to byte-level BPE.*
+
+---
 
 ## Unigram Language Model & SentencePiece
 
-Runs the merge idea **backwards**: start from a huge candidate vocab (all substrings), then iteratively drop the subwords whose removal hurts the corpus log-likelihood *least*, under a unigram LM where each token has probability $p(t)$. Segmentation of a word is the Viterbi-optimal split under that LM, not a greedy left-to-right match — so the same word can even be segmented differently depending on context (used for subword regularization/data augmentation).
+Runs the merge idea **backwards**: start from a huge candidate vocab (all substrings), then iteratively drop the subwords whose removal hurts the corpus log-likelihood *least*, under a unigram LM where each token has probability $p(t)$. Segmentation of a word is the Viterbi-optimal split under that LM, not a greedy left-to-right match - so the same word can even be segmented differently depending on context (used for subword regularization/data augmentation).
 
 $$  
 p(x) = \prod_{t\in\text{segmentation}(x)} p(t), \qquad \text{segmentation}^*(x) = \arg\max_{\text{segmentations}} \sum_t \log p(t)  
@@ -1134,14 +1210,16 @@ def viterbi_segment(word, token_logp, max_len=6):
     return path
 
 logp = {"un": -1.0, "happy": -1.5, "happi": -1.8, "ness": -1.2, "unhappy": -3.0}
-print(viterbi_segment("unhappy", logp))   # ['un', 'happy'] — beats 'unhappy' whole (-3.0 < -2.5)
+print(viterbi_segment("unhappy", logp))   # ['un', 'happy'] - beats 'unhappy' whole (-3.0 < -2.5)
 ```
 
-**SentencePiece** is the library that made this practical: it treats raw text as a **byte stream, whitespace included** (encoded as `▁`), so there's no separate pre-tokenization step and detokenization is lossless — this is why LLaMA/T5/Gemini-family models use it.
+**SentencePiece** is the library that made this practical: it treats raw text as a **byte stream, whitespace included** (encoded as `▁`), so there's no separate pre-tokenization step and detokenization is lossless - this is why LLaMA/T5/Gemini-family models use it.
+
+---
 
 ## Byte-level BPE (no `<unk>`, ever)
 
-GPT-2/3/4's trick: run BPE over raw **UTF-8 bytes** (base vocab = 256) instead of Unicode characters. Since every possible byte is already in the base vocabulary, **every string is representable** — emoji, code, any language, even malformed text — with zero `<unk>` tokens.
+GPT-2/3/4's trick: run BPE over raw **UTF-8 bytes** (base vocab = 256) instead of Unicode characters. Since every possible byte is already in the base vocabulary, **every string is representable** - emoji, code, any language, even malformed text - with zero `<unk>` tokens.
 
 ```python
 def to_byte_symbols(text):
@@ -1150,13 +1228,15 @@ def to_byte_symbols(text):
 print(to_byte_symbols("café🙂")[:6])   # multi-byte UTF-8 chars just become 2-4 byte symbols
 ```
 
-*Trade-off: rare Unicode (emoji, CJK) costs more tokens (2-4 bytes each) than a dedicated char-level vocab would, but you never crash on unseen input — a huge robustness win for a production LLM.*
+*Trade-off: rare Unicode (emoji, CJK) costs more tokens (2-4 bytes each) than a dedicated char-level vocab would, but you never crash on unseen input - a huge robustness win for a production LLM.*
+
+---
 
 ## Special tokens, vocab size & sequence-length trade-offs
 
 - **Reserved tokens:** `[BOS]/[EOS]` (sequence boundaries), `[PAD]` (batch padding, usually masked out of loss/attention), `[UNK]` (only needed for non-byte-level tokenizers), `[CLS]/[SEP]` (BERT-style task tokens).
 - **Vocab size trade-off:** bigger vocab → shorter sequences (cheaper attention, more context per token) but a bigger, sparser embedding/softmax matrix and rarer tokens are seen less often during training. GPT-family sits around 50k–100k+; that number is itself a tuned hyperparameter.
-- **Fertility:** tokens-per-word varies by language — tokenizers trained mostly on English under-serve other languages (more tokens per word there), which is a real fairness/cost issue for multilingual LLMs.
+- **Fertility:** tokens-per-word varies by language - tokenizers trained mostly on English under-serve other languages (more tokens per word there), which is a real fairness/cost issue for multilingual LLMs.
 - **Interview one-liner:** *BPE = greedy frequency merges (GPT), WordPiece = greedy likelihood-ratio merges + `##` (BERT), Unigram = prune from a big vocab + Viterbi segmentation (SentencePiece/T5), byte-level BPE = BPE over bytes so OOV is structurally impossible (GPT-2+).*
 
 ---
@@ -1182,10 +1262,12 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 
 Q = np.array([[1., 0.]]); K = np.array([[1., 0.], [0., 1.]]); V = np.array([[10., 0.], [0., 10.]])
 out, w = scaled_dot_product_attention(Q, K, V)
-print(np.round(w, 2))   # [[0.67 0.33]] — attends more to the matching key
+print(np.round(w, 2))   # [[0.67 0.33]] - attends more to the matching key
 ```
 
 > **Why divide by $\sqrt{d_k}$?** Dot products have variance $\propto d_k$; without scaling, softmax saturates into a near one-hot and gradients vanish. Most-asked attention follow-up.
+
+---
 
 ## Multi-Head Attention
 
@@ -1209,12 +1291,14 @@ print(multi_head_attention(X, W(), W(), W(), W(), num_heads=2).shape)   # (4, 8)
 
 *Heads attend to different relationship types (syntax, coreference, position) in parallel subspaces.*
 
+---
+
 ## MQA, GQA & MLA (shrinking the KV cache)
 
 Standard MHA gives every query head its **own** key/value head, so the KV cache grows with $H$ heads. Three variants trade some quality for a smaller cache, which is what actually limits inference batch size / context length:
 
 - **MQA (Multi-Query Attention):** all $H$ query heads share a **single** K/V head ($H_{kv}=1$). Max cache compression, but the biggest quality hit.
-- **GQA (Grouped-Query Attention):** query heads are split into $G$ groups, each group shares one K/V head ($1 < H_{kv}=G < H$) — interpolates between MHA ($G=H$) and MQA ($G=1$). This is the deployed sweet spot (LLaMA-2/3 70B, Mistral, Gemma).
+- **GQA (Grouped-Query Attention):** query heads are split into $G$ groups, each group shares one K/V head ($1 < H_{kv}=G < H$) - interpolates between MHA ($G=H$) and MQA ($G=1$). This is the deployed sweet spot (LLaMA-2/3 70B, Mistral, Gemma).
 - **MLA (Multi-head Latent Attention, DeepSeek-V2/V3):** instead of fewer K/V *heads*, compress K and V for **all** heads into one shared low-rank latent vector per token, then up-project back to per-head K/V at attention time. Shrinks the cache even further than GQA while staying much closer to full-MHA quality (you cache the small latent, not $H_{kv}$ full-size K/V pairs).
 
 $$  
@@ -1235,13 +1319,15 @@ def grouped_query_attention(X, Wq, Wk, Wv, Wo, num_heads, num_kv_heads):
 
 rng = np.random.default_rng(0); X = rng.normal(size=(4, 8))
 Wq = rng.normal(size=(8, 8))
-for num_kv in [4, 2, 1]:                                   # MHA, GQA, MQA — same call, different H_kv
+for num_kv in [4, 2, 1]:                                   # MHA, GQA, MQA - same call, different H_kv
     Wk = Wv = rng.normal(size=(8, num_kv * 2))
     print(num_kv, grouped_query_attention(X, Wq, Wk, Wv, rng.normal(size=(8, 8)),
                                            num_heads=4, num_kv_heads=num_kv).shape)   # all (4, 8)
 ```
 
 *Interview one-liner: MHA = quality ceiling; MQA = smallest KV cache but the biggest quality drop; GQA = the practical middle ground almost every open-weight model ships; MLA = compress into a shared low-rank latent instead of dropping heads, so DeepSeek keeps near-MHA quality at a smaller-than-GQA cache.*
+
+---
 
 ## Sinusoidal Positional Encoding
 
@@ -1260,11 +1346,13 @@ def positional_encoding(seq_len, d_model):
 print(positional_encoding(4, 6).shape)   # (4, 6)
 ```
 
-*Attention is permutation-invariant — without positions it can't tell word order. Modern LLMs use **RoPE** (rotary) which encodes relative position via rotation.*
+*Attention is permutation-invariant - without positions it can't tell word order. Modern LLMs use **RoPE** (rotary) which encodes relative position via rotation.*
 
-## RoPE (Rotary Position Embedding — what modern LLMs actually use)
+---
 
-Instead of *adding* a position vector, RoPE **rotates** each 2-D slice of Q and K by an angle proportional to the token's position. The dot product $q_m\cdot k_n$ then depends only on the **relative** offset $m-n$ — so the model extrapolates to longer contexts far better than fixed sinusoids.
+## RoPE (Rotary Position Embedding - what modern LLMs actually use)
+
+Instead of *adding* a position vector, RoPE **rotates** each 2-D slice of Q and K by an angle proportional to the token's position. The dot product $q_m\cdot k_n$ then depends only on the **relative** offset $m-n$ - so the model extrapolates to longer contexts far better than fixed sinusoids.
 
 $$  
 \theta_i = \text{base}^{-2i/d}, \qquad \big(x_{2i}, x_{2i+1}\big) \mapsto \big(x_{2i}\cos m\theta_i - x_{2i+1}\sin m\theta_i,\; x_{2i}\sin m\theta_i + x_{2i+1}\cos m\theta_i\big)  
@@ -1272,7 +1360,7 @@ $$
 
 ```python
 def rope(x, base=10000):
-    # x: (seq_len, d) — rotate each (even, odd) dimension pair by pos * theta_i.
+    # x: (seq_len, d) - rotate each (even, odd) dimension pair by pos * theta_i.
     seq_len, d = x.shape
     pos = np.arange(seq_len)[:, None]; i = np.arange(0, d, 2)[None, :]
     theta = pos / base ** (i / d)                  # angle per position & frequency
@@ -1283,10 +1371,12 @@ def rope(x, base=10000):
     out[:, 1::2] = x1 * sin + x2 * cos
     return out
 
-print(rope(np.ones((3, 4))).shape)   # (3, 4) — applied to Q and K before the QK^T dot product
+print(rope(np.ones((3, 4))).shape)   # (3, 4) - applied to Q and K before the QK^T dot product
 ```
 
 *Applied to Q and K only (not V), per layer, right before attention. Low frequencies handle long-range position, high frequencies fine local order. NTK/YaRN scaling stretches RoPE to extend context windows post-training.*
+
+---
 
 ## Transformer Encoder Block
 
@@ -1301,9 +1391,11 @@ def transformer_block(X, mha_weights, ff_w1, ff_w2, ln):
 
 *Two universal ingredients: **residual connections** (gradient highway) and **LayerNorm** (stable activations). Pre-LN (norm inside the residual) trains more stably than the original Post-LN.*
 
-## Mixture of Experts (MoE — scale params without scaling compute)
+---
 
-Replace the single dense FFN with $N$ expert FFNs plus a **router** that sends each token to only its top-$k$ experts (usually $k{=}1$ or $2$). You get a model with a huge parameter count but a nearly constant per-token FLOP cost — the trick behind Mixtral, DeepSeek-V3, and the GPT-4-class "sparse" models.
+## Mixture of Experts (MoE - scale params without scaling compute)
+
+Replace the single dense FFN with $N$ expert FFNs plus a **router** that sends each token to only its top-$k$ experts (usually $k{=}1$ or $2$). You get a model with a huge parameter count but a nearly constant per-token FLOP cost - the trick behind Mixtral, DeepSeek-V3, and the GPT-4-class "sparse" models.
 
 $$  
 g = \text{softmax}(W_g x),\qquad y = \sum_{e\in\text{top-}k(g)} \frac{g_e}{\sum_{e'} g_{e'}}\, f_e(x)  
@@ -1324,7 +1416,9 @@ out, chosen = moe_layer(rng.normal(size=d), experts, rng.normal(size=(4, d)), k=
 print(out.shape, chosen)   # only 2 of 4 experts run per token
 ```
 
-*Key headache: **load balancing** — without an auxiliary loss the router collapses onto a few experts. Also, all experts' weights must live in memory even though each token uses few, so MoE trades compute for memory/bandwidth.*
+*Key headache: **load balancing** - without an auxiliary loss the router collapses onto a few experts. Also, all experts' weights must live in memory even though each token uses few, so MoE trades compute for memory/bandwidth.*
+
+---
 
 ## KV Cache (the inference-efficiency question)
 
@@ -1334,13 +1428,13 @@ $$
 \text{KV bytes} = 2 \cdot L \cdot H_{kv} \cdot d_{head} \cdot N_{seq} \cdot N_{batch} \cdot \text{bytes/elem}  
 $$
 
-(leading 2 = K and V; $L$ layers, $H_{kv}$ KV-heads). The KV cache — not the weights — usually caps how many concurrent users you can batch. **MQA/GQA** (above) shrink $H_{kv}$ to cut it; **MLA** replaces the $H_{kv}$ term with a much smaller latent dimension $r$.
+(leading 2 = K and V; $L$ layers, $H_{kv}$ KV-heads). The KV cache - not the weights - usually caps how many concurrent users you can batch. **MQA/GQA** (above) shrink $H_{kv}$ to cut it; **MLA** replaces the $H_{kv}$ term with a much smaller latent dimension $r$.
 
 ---
 
 # LLM Decoding & Sampling
 
-Given logits over the vocabulary, *how you pick the next token* is its own family of algorithms — heavily asked for LLM roles.
+Given logits over the vocabulary, *how you pick the next token* is its own family of algorithms - heavily asked for LLM roles.
 
 ## Greedy & Temperature Sampling
 
@@ -1361,6 +1455,8 @@ logits = np.array([2.0, 1.0, 0.1, 0.05])
 print(greedy_decode(logits), temperature_sample(logits, 0.7, seed=0))
 ```
 
+---
+
 ## Top-k Sampling
 
 Keep only the $k$ highest-logit tokens, renormalize, sample.
@@ -1375,7 +1471,9 @@ def top_k_sample(logits, k=2, seed=None):
 print(top_k_sample(np.array([2.0, 1.0, 0.1, 0.05]), k=2, seed=0))   # 0 or 1
 ```
 
-## Top-p (Nucleus) Sampling — the modern default
+---
+
+## Top-p (Nucleus) Sampling - the modern default
 
 Keep the **smallest** set of tokens whose cumulative probability $\ge p$, renormalize, sample. Adapts the candidate set to the distribution's shape.
 
@@ -1391,6 +1489,8 @@ def top_p_sample(logits, p=0.9, seed=None):
 
 print(top_p_sample(np.array([2.0, 1.0, 0.1, 0.05]), p=0.9, seed=0))
 ```
+
+---
 
 ## Beam Search (keep top-B sequences)
 
@@ -1409,11 +1509,13 @@ def beam_search(step_logits_fn, start, beam_width=2, max_len=3):
 print(beam_search(lambda seq: np.array([0.1, 2.0, 0.1]), start=[0]))   # [0, 1, 1, 1]
 ```
 
-*Higher-likelihood sequences (good for translation), but bland for open-ended chat — hence sampling. Length-normalize scores to avoid favoring short sequences.*
+*Higher-likelihood sequences (good for translation), but bland for open-ended chat - hence sampling. Length-normalize scores to avoid favoring short sequences.*
+
+---
 
 ## Speculative Decoding (2-3x faster inference, same distribution)
 
-A small **draft** model proposes $\gamma$ tokens cheaply; the big **target** model then verifies them all in a *single* forward pass. Accept each draft token with probability $\min(1, p_{\text{target}}/p_{\text{draft}})$; on the first rejection, resample from the adjusted residual and stop. The math guarantees the output is distributed *exactly* as if you'd sampled from the target model alone — pure speedup, no quality loss.
+A small **draft** model proposes $\gamma$ tokens cheaply; the big **target** model then verifies them all in a *single* forward pass. Accept each draft token with probability $\min(1, p_{\text{target}}/p_{\text{draft}})$; on the first rejection, resample from the adjusted residual and stop. The math guarantees the output is distributed *exactly* as if you'd sampled from the target model alone - pure speedup, no quality loss.
 
 ```python
 def speculative_decode(draft_logits_fn, target_logits_fn, prefix, gamma=4, seed=0):
@@ -1439,7 +1541,7 @@ target = lambda s: np.random.default_rng((sum(s) + 1) % 100).normal(size=V)
 print(speculative_decode(draft, target, [0], gamma=4))
 ```
 
-*The win comes from verifying $\gamma$ tokens in one batched target pass instead of $\gamma$ sequential ones — memory-bandwidth-bound LLM decoding loves this. Medusa / EAGLE replace the separate draft model with extra prediction heads.*
+*The win comes from verifying $\gamma$ tokens in one batched target pass instead of $\gamma$ sequential ones - memory-bandwidth-bound LLM decoding loves this. Medusa / EAGLE replace the separate draft model with extra prediction heads.*
 
 ---
 
@@ -1449,11 +1551,11 @@ print(speculative_decode(draft, target, [0], gamma=4))
 
 # Fine-Tuning & Alignment
 
-Pretraining gives you a model that *completes* text; this section is how you make it *useful and safe* — cheap parameter-efficient tuning, then preference alignment. The hottest LLM-interview area right now.
+Pretraining gives you a model that *completes* text; this section is how you make it *useful and safe* - cheap parameter-efficient tuning, then preference alignment. The hottest LLM-interview area right now.
 
 ## LoRA / QLoRA (parameter-efficient fine-tuning)
 
-Full fine-tuning updates all $d\times d$ weights per layer — billions of params. LoRA **freezes** the pretrained $W$ and learns a tiny low-rank update $\Delta W = \frac{\alpha}{r}AB$ with $A\in\mathbb{R}^{d\times r}, B\in\mathbb{R}^{r\times d}, r\ll d$. You train ~0.1% of the parameters and can hot-swap adapters per task.
+Full fine-tuning updates all $d\times d$ weights per layer - billions of params. LoRA **freezes** the pretrained $W$ and learns a tiny low-rank update $\Delta W = \frac{\alpha}{r}AB$ with $A\in\mathbb{R}^{d\times r}, B\in\mathbb{R}^{r\times d}, r\ll d$. You train ~0.1% of the parameters and can hot-swap adapters per task.
 
 $$  
 h = xW + \frac{\alpha}{r}\,x A B, \qquad A \sim \mathcal{N}(0,\sigma^2),\; B = 0 \;\text{at init (so } \Delta W = 0)  
@@ -1471,7 +1573,9 @@ B = np.zeros((r, d_out))
 print(lora_forward(rng.normal(size=(3, d_in)), W, A, B).shape)   # (3, 5)
 ```
 
-*B init at zero means the adapter starts as identity — no shock to the pretrained model. **QLoRA** goes further: quantize the frozen base to 4-bit (NF4) and train the LoRA adapters in bf16, so a 65B model fine-tunes on a single GPU. At inference you can fold $\frac{\alpha}{r}AB$ back into $W$ for zero added latency.*
+*B init at zero means the adapter starts as identity - no shock to the pretrained model. **QLoRA** goes further: quantize the frozen base to 4-bit (NF4) and train the LoRA adapters in bf16, so a 65B model fine-tunes on a single GPU. At inference you can fold $\frac{\alpha}{r}AB$ back into $W$ for zero added latency.*
+
+---
 
 ## RLHF (reward model + PPO)
 
@@ -1494,11 +1598,13 @@ print(round(float(reward_model_loss(np.array([2.0]), np.array([0.5]))), 4))   # 
 print(round(float(rlhf_reward(1.0, -2.0, -2.3)), 4))
 ```
 
-*Why the KL leash: without it PPO drives the policy to whatever maximizes the (imperfect) reward model, producing degenerate high-reward text. RLHF is powerful but a fragile multi-model pipeline — which is exactly why DPO exists.*
+*Why the KL leash: without it PPO drives the policy to whatever maximizes the (imperfect) reward model, producing degenerate high-reward text. RLHF is powerful but a fragile multi-model pipeline - which is exactly why DPO exists.*
 
-## DPO (Direct Preference Optimization — RLHF without RL)
+---
 
-DPO skips the reward model and PPO entirely. A bit of algebra shows the optimal RLHF policy has a closed form, and you can optimize directly on preference pairs with a simple classification loss — the model *is* its own implicit reward. Far more stable, no sampling loop, no separate reward network.
+## DPO (Direct Preference Optimization - RLHF without RL)
+
+DPO skips the reward model and PPO entirely. A bit of algebra shows the optimal RLHF policy has a closed form, and you can optimize directly on preference pairs with a simple classification loss - the model *is* its own implicit reward. Far more stable, no sampling loop, no separate reward network.
 
 $$  
 L_{DPO} = -\log\sigma\!\left(\beta\log\frac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \beta\log\frac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)}\right)  
@@ -1514,13 +1620,13 @@ print(round(float(dpo_loss(np.array([-2.0]), np.array([-3.0]),
                            np.array([-2.5]), np.array([-2.5]))), 4))
 ```
 
-*The `ref` model (frozen SFT copy) plays the role RLHF's KL penalty did — it stops the policy drifting too far. DPO (and cousins like IPO/KTO/ORPO) has largely replaced PPO-RLHF for open-weight models because it's one loss on a static dataset.*
+*The `ref` model (frozen SFT copy) plays the role RLHF's KL penalty did - it stops the policy drifting too far. DPO (and cousins like IPO/KTO/ORPO) has largely replaced PPO-RLHF for open-weight models because it's one loss on a static dataset.*
 
 ---
 
 # Representation Learning & Embeddings
 
-Google leans heavily on retrieval, recommendations and embeddings — these come up constantly.
+Google leans heavily on retrieval, recommendations and embeddings - these come up constantly.
 
 ## TF-IDF
 
@@ -1545,7 +1651,9 @@ print(mat.shape, vocab)
 
 *Down-weights words common across all docs ("the", "sat") and up-weights distinctive ones. Still a strong sparse-retrieval baseline (BM25 is the refined version).*
 
-## Word2Vec — Skip-Gram with Negative Sampling
+---
+
+## Word2Vec - Skip-Gram with Negative Sampling
 
 Predict context words from a center word. Negative sampling turns the expensive softmax into binary logistic regressions against $k$ random "negative" words:
 
@@ -1570,6 +1678,8 @@ print(nc.shape)   # (5,) updated center embedding
 ```
 
 *Key idea: "you shall know a word by the company it keeps." Negative sampling makes training $O(k)$ instead of $O(V)$ per step.*
+
+---
 
 ## Contrastive & Triplet Loss (metric learning)
 
@@ -1597,6 +1707,8 @@ print(round(float(info_nce(np.array([1.,0]), np.array([[1.,0],[0,1.],[-1,0.]])))
 
 *Foundation of face recognition (FaceNet), CLIP, and modern self-supervised pretraining. Hard-negative mining is what makes triplet loss actually work.*
 
+---
+
 ## Matrix Factorization for Recommendations
 
 $$  
@@ -1622,12 +1734,14 @@ print(np.round(matrix_factorization(R), 1))   # fills in the missing entries
 
 *The classic collaborative-filtering model (Netflix Prize). Two-tower neural retrieval is the deep-learning descendant.*
 
-## Approximate Nearest Neighbors (LSH & HNSW — the RAG backbone)
+---
 
-Once you have embeddings, retrieval = "find the nearest vectors to this query." Exact search is $O(N d)$ per query — hopeless at billions of vectors. ANN indexes trade a little recall for orders-of-magnitude speed.
+## Approximate Nearest Neighbors (LSH & HNSW - the RAG backbone)
+
+Once you have embeddings, retrieval = "find the nearest vectors to this query." Exact search is $O(N d)$ per query - hopeless at billions of vectors. ANN indexes trade a little recall for orders-of-magnitude speed.
 
 - **LSH (Locality-Sensitive Hashing):** hash vectors so *nearby* ones collide. Random hyperplanes give a binary code per vector (sign of $x\cdot w$); only compare within the same bucket.
-- **HNSW (the production default):** a multi-layer navigable small-world graph. Greedily hop toward the query through a sparse top layer, then descend to denser layers — $O(\log N)$ hops. This is what FAISS / pgvector / most vector DBs use.
+- **HNSW (the production default):** a multi-layer navigable small-world graph. Greedily hop toward the query through a sparse top layer, then descend to denser layers - $O(\log N)$ hops. This is what FAISS / pgvector / most vector DBs use.
 
 ```python
 def lsh_buckets(X, n_planes=8, seed=0):
@@ -1644,7 +1758,7 @@ buckets, planes = lsh_buckets(X)
 print(len(buckets))   # query hashes to one bucket; only rank vectors sharing it
 ```
 
-*More planes → finer buckets → higher precision but lower recall (fewer collisions). Product Quantization (PQ) is the other big idea: compress vectors to bytes so billions fit in RAM. Metric matters — normalize for cosine vs raw L2.*
+*More planes → finer buckets → higher precision but lower recall (fewer collisions). Product Quantization (PQ) is the other big idea: compress vectors to bytes so billions fit in RAM. Metric matters - normalize for cosine vs raw L2.*
 
 ---
 
@@ -1676,6 +1790,8 @@ print(round(vae_loss(np.array([1.,0]), np.array([0.9,0.1]),
 
 *Without the reparameterization trick you can't backprop through a random sample. The KL term keeps the latent space close to $\mathcal{N}(0,I)$ so you can sample new data.*
 
+---
+
 ## Generative Adversarial Network (GAN)
 
 $$  
@@ -1694,9 +1810,11 @@ print(round(gan_d_loss(0.9, 0.1), 3), round(gan_g_loss(0.1), 3))
 
 *Generator and discriminator play a minimax game. Use the **non-saturating** generator loss $-\log D(G(z))$ (not $\log(1-D)$) for stronger early gradients. Mode collapse is the classic failure.*
 
-## Diffusion Models (DDPM — how Stable Diffusion / Sora / Imagen work)
+---
 
-Two processes. **Forward:** gradually add Gaussian noise over $T$ steps until data becomes pure noise — and thanks to a closed form, you can jump to any step $t$ in one shot. **Reverse:** train a network $\epsilon_\theta$ to *predict the noise* added at step $t$; sampling then denoises from pure noise back to data. The loss is beautifully simple — just MSE on the predicted noise.
+## Diffusion Models (DDPM - how Stable Diffusion / Sora / Imagen work)
+
+Two processes. **Forward:** gradually add Gaussian noise over $T$ steps until data becomes pure noise - and thanks to a closed form, you can jump to any step $t$ in one shot. **Reverse:** train a network $\epsilon_\theta$ to *predict the noise* added at step $t$; sampling then denoises from pure noise back to data. The loss is beautifully simple - just MSE on the predicted noise.
 
 $$  
 x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon, \qquad L = \mathbb{E}_{t,x_0,\epsilon}\big[\lVert \epsilon - \epsilon_\theta(x_t, t)\rVert^2\big]  
@@ -1730,7 +1848,7 @@ print(np.round(ddpm_step(xt, 50, eps, betas, alphas, abar), 2))   # one step bac
 
 # Evaluation Metrics (from scratch)
 
-Knowing *which* metric — and computing it without `sklearn` — is a frequent screen.
+Knowing *which* metric - and computing it without `sklearn` - is a frequent screen.
 
 ## Confusion Matrix → Precision / Recall / F1
 
@@ -1753,6 +1871,8 @@ print({k: round(v, 2) for k, v in classification_metrics(y_true, y_pred).items()
 
 *Precision vs recall: spam filter wants precision (don't kill real mail); cancer screen wants recall (don't miss a case). Use F1/AUC on imbalanced data, not accuracy.*
 
+---
+
 ## ROC-AUC (threshold-free, rank-based)
 
 $$  
@@ -1769,6 +1889,8 @@ print(round(roc_auc(np.array([0, 0, 1, 1]), np.array([0.1, 0.4, 0.35, 0.8])), 3)
 ```
 
 *AUC = probability a random positive ranks above a random negative. Insensitive to threshold and class balance.*
+
+---
 
 ## Regression: MSE / RMSE / MAE / R²
 
@@ -1789,7 +1911,9 @@ print({k: round(v, 3) for k, v in
 
 *MAE is robust to outliers; MSE punishes large errors harder. $R^2$ = fraction of variance explained (1 = perfect, 0 = predicting the mean).*
 
-## NDCG (ranking quality — recsys/search)
+---
+
+## NDCG (ranking quality - recsys/search)
 
 $$  
 \text{DCG@k} = \sum_{i=1}^{k}\frac{2^{rel_i}-1}{\log_2(i+1)}, \qquad \text{NDCG@k} = \frac{\text{DCG@k}}{\text{IDCG@k}}  
@@ -1802,14 +1926,16 @@ def ndcg(relevances, k=None):
     ideal = np.sort(relevances)[::-1]
     return dcg(relevances[:k]) / (dcg(ideal[:k]) + 1e-12)
 
-print(round(ndcg([3, 2, 3, 0, 1, 2]), 3))   # 0.949 — rewards relevant items ranked high
+print(round(ndcg([3, 2, 3, 0, 1, 2]), 3))   # 0.949 - rewards relevant items ranked high
 ```
 
 *The discount ($1/\log_2$) means relevance at rank 1 matters far more than at rank 10. Normalized so 1.0 = perfect ranking.*
 
+---
+
 ## PR-AUC / Average Precision (for rare positives)
 
-On heavily imbalanced data (fraud, retrieval), ROC-AUC looks deceptively good because true negatives dominate. The **precision-recall** curve — and its area, **average precision** — focuses on the positive class, which is what you actually care about.
+On heavily imbalanced data (fraud, retrieval), ROC-AUC looks deceptively good because true negatives dominate. The **precision-recall** curve - and its area, **average precision** - focuses on the positive class, which is what you actually care about.
 
 $$  
 \text{AP} = \sum_k \big(R_k - R_{k-1}\big)\,P_k \quad(\text{area under the precision-recall curve})  
@@ -1830,9 +1956,11 @@ print(round(average_precision(np.array([0, 0, 1, 1]), np.array([0.1, 0.4, 0.35, 
 
 *Rule of thumb: ROC-AUC for roughly balanced classes, PR-AUC when positives are rare. A random baseline scores AP = (positive rate), not 0.5.*
 
+---
+
 ## Perplexity (the language-model metric)
 
-Perplexity is just the exponentiated average negative log-likelihood — "how many equally-likely tokens is the model choosing among on average?" Lower is better; it's the standard intrinsic LM score.
+Perplexity is just the exponentiated average negative log-likelihood - "how many equally-likely tokens is the model choosing among on average?" Lower is better; it's the standard intrinsic LM score.
 
 $$  
 \text{PPL} = \exp\!\left(-\frac{1}{N}\sum_i \log p(x_i \mid x_{<i})\right) = \exp(\text{mean cross-entropy})  
@@ -1847,11 +1975,13 @@ def perplexity(logits, targets):
 print(round(perplexity(np.array([[2., 1., 0.], [0., 2., 1.]]), np.array([0, 1])), 3))   # 1.503
 ```
 
-*PPL = 1 is a perfect oracle; PPL = vocab size is uniform guessing. Only comparable across models with the **same tokenizer** — byte vs word tokenization changes the denominator.*
+*PPL = 1 is a perfect oracle; PPL = vocab size is uniform guessing. Only comparable across models with the **same tokenizer** - byte vs word tokenization changes the denominator.*
+
+---
 
 ## BLEU & ROUGE (text generation overlap)
 
-**BLEU** (translation) measures n-gram **precision** with a brevity penalty; **ROUGE-L** (summarization) measures **recall** via the longest common subsequence. Both are cheap n-gram proxies — increasingly supplemented by embedding-based scores (BERTScore) and LLM judges.
+**BLEU** (translation) measures n-gram **precision** with a brevity penalty; **ROUGE-L** (summarization) measures **recall** via the longest common subsequence. Both are cheap n-gram proxies - increasingly supplemented by embedding-based scores (BERTScore) and LLM judges.
 
 ```python
 def bleu(candidate, reference, max_n=4):
@@ -1878,7 +2008,7 @@ print(round(bleu("the cat sat on the mat".split(), "the cat sat on the rug".spli
 print(round(rouge_l("the cat sat down".split(), "the cat sat".split()), 3))                 # 0.857
 ```
 
-*The brevity penalty stops BLEU from rewarding one-word high-precision outputs. Both correlate only loosely with human judgment — know their limits, and that BERTScore / LLM-as-judge are the modern complements.*
+*The brevity penalty stops BLEU from rewarding one-word high-precision outputs. Both correlate only loosely with human judgment - know their limits, and that BERTScore / LLM-as-judge are the modern complements.*
 
 ---
 
@@ -1905,6 +2035,8 @@ print(sample_categorical(np.array([0.1, 0.3, 0.6]), seed=0))
 
 *Gumbel-softmax (a soft, differentiable version) lets you backprop through discrete sampling.*
 
+---
+
 ## Reservoir Sampling (uniform sample from an unbounded stream)
 
 Each of $n$ items ends up retained with probability $k/n$ in a single pass, $O(k)$ memory.
@@ -1924,14 +2056,16 @@ print(reservoir_sample(range(1000), k=3))
 
 *Classic "sample from data you can't fit in memory." Provable by induction that every element has prob $k/n$.*
 
-## Multi-Armed Bandit — ε-greedy & UCB
+---
+
+## Multi-Armed Bandit - ε-greedy & UCB
 
 $$  
 \varepsilon\text{-greedy: explore w.p. } \varepsilon, \text{ else } \arg\max_a Q_a \qquad  
 \text{UCB: } a_t = \arg\max_a\Big(Q_a + c\sqrt{\tfrac{\ln t}{N_a}}\Big)  
 $$
 
-UCB adds an "optimism" bonus that shrinks as an arm is pulled more — principled exploration.
+UCB adds an "optimism" bonus that shrinks as an arm is pulled more - principled exploration.
 
 ```python
 def epsilon_greedy_bandit(true_means, steps=1000, eps=0.1, seed=0):
@@ -1956,9 +2090,11 @@ print("UCB best arm:", ucb_bandit([1.0, 1.5, 2.0]))          # 2
 
 *Exploration/exploitation in miniature. Thompson Sampling (Bayesian posterior sampling) is the third must-know.*
 
+---
+
 ## Thompson Sampling (Bayesian posterior sampling)
 
-Keep a posterior over each arm's reward (Beta for Bernoulli rewards). Each round, **sample** a plausible mean from every arm's posterior and pull the argmax — arms you're uncertain about occasionally sample high, giving exploration for free, with no explicit bonus term. Often beats UCB empirically.
+Keep a posterior over each arm's reward (Beta for Bernoulli rewards). Each round, **sample** a plausible mean from every arm's posterior and pull the argmax - arms you're uncertain about occasionally sample high, giving exploration for free, with no explicit bonus term. Often beats UCB empirically.
 
 $$  
 \theta_a \sim \text{Beta}(\alpha_a, \beta_a), \quad a_t = \arg\max_a \theta_a, \qquad (\alpha_a,\beta_a) \mathrel{+}= (r,\, 1-r)  
@@ -1975,16 +2111,16 @@ def thompson_bandit(true_means, steps=2000, seed=0):
         a[arm] += reward; b[arm] += 1 - reward       # Bayesian update of the posterior
     return int(np.argmax(a / (a + b)))
 
-print(thompson_bandit([0.2, 0.5, 0.8]))   # 2 — converges on the best arm
+print(thompson_bandit([0.2, 0.5, 0.8]))   # 2 - converges on the best arm
 ```
 
-*The posterior automatically shrinks exploration as evidence accumulates — no schedule to tune, unlike ε or UCB's $c$. Extends cleanly to Gaussian rewards and contextual bandits.*
+*The posterior automatically shrinks exploration as evidence accumulates - no schedule to tune, unlike ε or UCB's $c$. Extends cleanly to Gaussian rewards and contextual bandits.*
 
 ---
 
 # Sequence Models & Dynamic Programming in ML
 
-## Viterbi Algorithm (most-likely hidden state sequence — HMM decoding)
+## Viterbi Algorithm (most-likely hidden state sequence - HMM decoding)
 
 $$  
 \delta_t(s) = \max_{s'}\big[\delta_{t-1}(s')\cdot a_{s's}\big]\cdot b_s(o_t) \quad(\text{work in log-space to avoid underflow})  
@@ -2015,9 +2151,11 @@ print(viterbi([0, 1, 2], start, trans, emit))   # [0, 0, 1] most likely state pa
 
 *Same DP skeleton as edit distance / sequence alignment. Forward-backward (sum instead of max) gives marginal probabilities; CTC and beam-search decoding are cousins.*
 
+---
+
 ## Edit (Levenshtein) Distance
 
-Minimum insert/delete/substitute edits to turn one string into another. The archetypal 2-D DP — same grid as sequence alignment, spell-check, and diff.
+Minimum insert/delete/substitute edits to turn one string into another. The archetypal 2-D DP - same grid as sequence alignment, spell-check, and diff.
 
 $$  
 dp[i][j] = \min\big(dp[i{-}1][j]{+}1,\; dp[i][j{-}1]{+}1,\; dp[i{-}1][j{-}1] + \mathbb{1}[a_i \ne b_j]\big)  
@@ -2038,6 +2176,8 @@ def edit_distance(a, b):
 print(edit_distance("kitten", "sitting"))   # 3
 ```
 
+---
+
 ## Dynamic Time Warping (DTW)
 
 Edit distance's continuous cousin: align two time series that are out of phase or run at different speeds (speech, gestures, sensor traces) by warping the time axis. Same DP grid, but the cell cost is a distance and diagonal moves aren't penalized for length.
@@ -2051,7 +2191,7 @@ def dtw(a, b):
             D[i, j] = cost + min(D[i-1, j], D[i, j-1], D[i-1, j-1])   # warp: reuse a step
     return D[n, m]
 
-print(round(dtw([1, 2, 3, 4, 5], [1, 2, 3, 6, 5]), 2))   # 2.0 — one mismatched sample
+print(round(dtw([1, 2, 3, 4, 5], [1, 2, 3, 6, 5]), 2))   # 2.0 - one mismatched sample
 ```
 
 *Both are $O(nm)$. A Sakoe-Chiba band (limit how far the warp path strays from the diagonal) cuts DTW cost and prevents pathological alignments.*
@@ -2064,7 +2204,7 @@ The through-line is the **Bellman equation**: the value of a state = immediate r
 
 ## Value Iteration & Policy Iteration (planning with a known model)
 
-Given transition probabilities $P$ and rewards $R$, solve for the optimal value function. **Value iteration** repeatedly applies the Bellman optimality backup until $V$ converges; **policy iteration** alternates full policy *evaluation* with greedy *improvement* — fewer, heavier iterations.
+Given transition probabilities $P$ and rewards $R$, solve for the optimal value function. **Value iteration** repeatedly applies the Bellman optimality backup until $V$ converges; **policy iteration** alternates full policy *evaluation* with greedy *improvement* - fewer, heavier iterations.
 
 $$  
 V^*(s) = \max_a \Big[R(s,a) + \gamma \sum_{s'} P(s'\mid s,a)\,V^*(s')\Big]  
@@ -2097,10 +2237,12 @@ P = np.zeros((S, A, S))
 for s in range(S):
     P[s, 1, min(s+1, S-1)] = 1.0; P[s, 0, max(s-1, 0)] = 1.0
 R = np.zeros((S, A)); R[S-2, 1] = 1.0                  # reward for stepping into the goal
-print(value_iteration(P, R)[1], policy_iteration(P, R)[1])   # [1 1 0] [1 1 0] — same policy
+print(value_iteration(P, R)[1], policy_iteration(P, R)[1])   # [1 1 0] [1 1 0] - same policy
 ```
 
 *Both converge to the same optimum (contraction mapping). Value iteration = many cheap sweeps; policy iteration = few expensive ones. Q-learning below is the model-free, sampled version of the same Bellman backup.*
+
+---
 
 ## Tabular Q-Learning (off-policy TD control)
 
@@ -2130,6 +2272,8 @@ print(np.argmax(q_learning(env_step, 3, 2), axis=1))   # policy: move right to g
 
 *Off-policy: the `max` over next actions learns the greedy policy's value while exploring with ε-greedy. SARSA uses the actually-taken next action (on-policy).*
 
+---
+
 ## REINFORCE (policy gradient)
 
 $$  
@@ -2148,11 +2292,13 @@ def reinforce_loss(log_probs, rewards, gamma=0.99):
 print(round(reinforce_loss([np.log(0.6), np.log(0.4)], [1.0, 1.0]), 3))
 ```
 
-*Push up log-prob of actions that led to high return, down for low. Subtracting a baseline reduces variance without bias — the seed of A2C/PPO.*
+*Push up log-prob of actions that led to high return, down for low. Subtracting a baseline reduces variance without bias - the seed of A2C/PPO.*
+
+---
 
 ## Actor-Critic & GAE (learned baseline)
 
-REINFORCE's baseline can be a *learned* value function (the **critic**) instead of the batch mean. The advantage $A_t = G_t - V(s_t)$ says "how much better than expected was this action." **GAE** computes a low-variance advantage by exponentially averaging multi-step TD errors — the standard advantage estimator feeding PPO.
+REINFORCE's baseline can be a *learned* value function (the **critic**) instead of the batch mean. The advantage $A_t = G_t - V(s_t)$ says "how much better than expected was this action." **GAE** computes a low-variance advantage by exponentially averaging multi-step TD errors - the standard advantage estimator feeding PPO.
 
 $$  
 \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t), \qquad \hat A_t^{GAE} = \sum_{l\ge 0}(\gamma\lambda)^l\,\delta_{t+l}  
@@ -2173,7 +2319,9 @@ print(np.round(gae([1., 1., 1.], [0.5, 0.5, 0.5]), 3))
 
 *$\lambda$ trades bias vs variance: $\lambda{=}0$ is one-step TD (biased, low variance), $\lambda{=}1$ is Monte-Carlo (unbiased, high variance). ~0.95 is the usual sweet spot.*
 
-## PPO (Proximal Policy Optimization — the RLHF workhorse)
+---
+
+## PPO (Proximal Policy Optimization - the RLHF workhorse)
 
 Policy gradients are unstable because one big step can wreck the policy. PPO takes the biggest safe step by **clipping** the probability ratio $\pi_\theta/\pi_{\text{old}}$: as long as the update stays within $[1-\epsilon, 1+\epsilon]$ it optimizes the advantage, but the clip removes any incentive to move further. Simple, robust, and the algorithm behind RLHF.
 
@@ -2192,7 +2340,7 @@ print(round(ppo_loss(np.array([-0.5, -0.7]), np.array([-0.6, -0.6]),
                      np.array([1.0, -1.0])), 4))
 ```
 
-*The `min` makes it a lower bound: gains are capped by the clip, but losses aren't — so a bad action is always fully discouraged. PPO reuses each batch for several epochs (sample-efficient) and is the RL half of RLHF.*
+*The `min` makes it a lower bound: gains are capped by the clip, but losses aren't - so a bad action is always fully discouraged. PPO reuses each batch for several epochs (sample-efficient) and is the RL half of RLHF.*
 
 ---
 
@@ -2241,9 +2389,9 @@ print(round(ppo_loss(np.array([-0.5, -0.7]), np.array([-0.6, -0.6]),
 - **Reparameterization trick:** $z=\mu+\sigma\epsilon$ makes sampling differentiable (VAEs).
 - **Tokenizer choice:** BPE/WordPiece/Unigram are all subword compromises between word-level (huge vocab, OOV) and char-level (huge sequences); byte-level BPE removes `<unk>` entirely by tokenizing bytes.
 - **Adam vs AdamW:** AdamW decouples weight decay from the adaptive step (L2-in-Adam is *not* true weight decay); default for Transformers.
-- **LayerNorm vs RMSNorm:** RMSNorm drops mean-centering and bias — cheaper, same quality, hence LLaMA/Mistral/Gemma.
+- **LayerNorm vs RMSNorm:** RMSNorm drops mean-centering and bias - cheaper, same quality, hence LLaMA/Mistral/Gemma.
 - **RLHF vs DPO:** RLHF = reward model + PPO with a KL leash (powerful, fragile, multi-model); DPO = one closed-form preference loss against a frozen reference (stable, no RL loop).
-- **The four generative families:** VAE (encode→sample latent), GAN (minimax vs a discriminator), autoregressive (next-token, LLMs), diffusion (iterative denoising) — know one loss each.
+- **The four generative families:** VAE (encode→sample latent), GAN (minimax vs a discriminator), autoregressive (next-token, LLMs), diffusion (iterative denoising) - know one loss each.
 - **Sinusoidal vs RoPE:** RoPE rotates Q/K so attention depends on *relative* position → better length extrapolation; the modern default.
 
-> **Closing thought:** every block here is *one model + one loss + one gradient step*. If you can name those three for any algorithm, you can derive the code on the spot — which is exactly what the interview tests.
+> **Closing thought:** every block here is *one model + one loss + one gradient step*. If you can name those three for any algorithm, you can derive the code on the spot - which is exactly what the interview tests.
