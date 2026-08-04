@@ -137,6 +137,30 @@ $$
 
 where $P$ is parameters in billions, $Q$ is bits per weight, and overhead is a fudge factor (often 20–30%) for everything that isn't weights. Treat it as a floor, not a promise: long-context or high-concurrency workloads blow past a flat 30% because the KV cache dominates.
 
+That covers the fixed cost. The other half of the budget is the KV cache, and unlike the weights it scales with your traffic:
+
+$$
+\text{KV bytes} = 2 \times L \times H_{kv} \times d_{head} \times \text{bytes} \times S \times B
+$$
+
+The 2 is for K and V, $L$ is layers, $H_{kv}$ is the number of **KV** heads (not query heads, which is the whole point of GQA), $d_{head}$ the head dimension, bytes per element is 2 for FP16 and 1 for FP8, $S$ is sequence length in tokens (prompt plus generated), and $B$ is concurrent sequences. The practical move is to collapse everything before $S$ into a single **bytes-per-token** constant for your model, then multiply by tokens in flight.
+
+Llama-3-70B ($L$=80, $H_{kv}$=8, $d_{head}$=128) in FP16:
+
+$$
+2 \times 80 \times 8 \times 128 \times 2 = 327{,}680 \text{ bytes} \approx 0.32 \text{ MB/token}
+$$
+
+So one 8K-token conversation costs ~2.6 GB, and 32 of them concurrently costs ~84 GB, which is more than the INT4 weights and more than an 80 GB card holds on its own. Worth noting how much GQA is doing for you here: with full MHA (64 KV heads) that same model would burn ~2.6 MB/token, eight times worse.
+
+Put together, the number you actually budget against is:
+
+$$
+\text{VRAM} = \underbrace{P \times \tfrac{Q}{8}}_{\text{weights}} + \underbrace{\text{bytes/token} \times S \times B}_{\text{KV cache}} + \text{activations} + \underbrace{2\text{–}4 \text{ GB}}_{\text{CUDA overhead}}
+$$
+
+Read it backwards to answer the question you're usually asked: subtract weights and overhead from card capacity, divide what's left by bytes-per-token, and that's your total token budget to split between context length and concurrency.
+
 The trap this formula exposes: a 7B model in FP16 is "only" 14 GB and technically loads on a 16 GB card, but that leaves almost nothing for KV cache, so you're stuck with tiny batches and short contexts. Fitting the weights is table stakes; leaving *headroom* for the cache is what actually determines how many users you can serve. And check what your GPU supports before committing to a precision: native FP8 needs Hopper/Ada or newer, Ampere (A100) does INT8 but not FP8, and FP4 needs newer hardware still.
 
 ---
