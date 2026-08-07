@@ -138,7 +138,7 @@ $$
 We measure how loud the signal is compared to that noise with the **signal-to-quantization-noise ratio** (SQNR), in decibels:
 
 $$  
-\text{SQNR}_{dB} = 10 \log_{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
+\text{SQNR}*{dB} = 10 \log*{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
 $$
 
 The one fact to remember: **each extra bit buys you about 6 dB.** Adding a bit doubles the number of grid points, which halves the step $S$, which quarters the noise variance, which is +6 dB. So going from 4-bit to 8-bit is roughly 24 dB cleaner. (You will see this written as $\approx 6.02b + 1.76$. Trust the "6 dB per bit" slope; the $1.76$ constant is an ADC-theory detail that assumes a specific signal shape and does not always apply to a pile of weights.)
@@ -285,13 +285,13 @@ The plain idea first: quantize the weights one column at a time, and after each 
 More precisely, GPTQ treats each layer as a least-squares problem. Given calibration inputs $X$ and weights $W$, it wants the quantized $\hat W$ whose *output* is closest to the original:
 
 $$  
-\hat{W} = \arg\min_{\hat{W}} \; \big\lVert WX - \hat{W}X \big\rVert_2^2  
+\hat{W} = \arg\min_{\hat{W}}  \big\lVert WX - \hat{W}X \big\rVert_2^2  
 $$
 
 To know how to compensate, it uses the layer's Hessian $H = 2XX^\top$, which measures how sensitive the output is to each weight and how the weights interact. This comes from an older pruning method (Optimal Brain Surgeon) adapted to quantization (Optimal Brain Quantization, OBQ). The per-weight update and the error it costs are:
 
 $$  
-\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]_{qq}} \, [H^{-1}]_{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
+\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]*{qq}}  [H^{-1}]*{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
 $$
 
 You do not need to memorize that. The point is: $\delta$ is the correction spread across the remaining weights, and $\varepsilon_q$ is how much error this weight costs. OBQ is accurate but far too slow at billions of parameters, so GPTQ makes three practical simplifications:
@@ -313,7 +313,7 @@ You do not need to memorize that. The point is: $\delta$ is the correction sprea
 
 > **Why is this fast if the math looks so heavy?** Because GPTQ never runs a backward pass or touches the training loss. It is a forward pass over calibration data plus some linear algebra, layer by layer. It solves a small local problem per layer instead of optimizing the whole network. That is the trick behind the whole PTQ family: stay local, stay gradient-free.
 
-## AWQ: protect the weights the activations care about
+## 3) AWQ: protect the weights the activations care about
 
 AWQ stands for **Activation-aware Weight Quantization**, and the name trips people up constantly. It is W4A16: activations are never quantized, they only tell you *how* to quantize the weights.
 
@@ -323,11 +323,11 @@ The paper's opening experiment is the whole motivation. Quantize a model to INT3
 
 So which 1%? Three selection criteria, tested head to head:
 
-| How you pick the channels | Does it help? |
-| --- | --- |
-| Random 1% | Barely |
-| Largest **weight** magnitude | Barely, roughly the same as random |
-| Largest **activation** magnitude | Recovers nearly all the loss |
+| How you pick the channels        | Does it help?                      |
+| -------------------------------- | ---------------------------------- |
+| Random 1%                        | Barely                             |
+| Largest **weight** magnitude     | Barely, roughly the same as random |
+| Largest **activation** magnitude | Recovers nearly all the loss       |
 
 That result is the actual insight: **a weight matters not because it is large, but because the activation it multiplies is large.**
 
@@ -356,7 +356,7 @@ $$
 Mathematically nothing happened. But you now quantize $w\cdot s$ instead of $w$, and that changes the error. Write the unscaled output error for one weight, with $\text{RoundErr} \in [-0.5, 0.5]$ and $\mathbb{E}|\text{RoundErr}| \approx 0.25$:
 
 $$  
-\text{Err} = S \cdot \text{RoundErr}\!\left(\frac{w}{S}\right) \cdot x, \qquad \text{Err}' = S' \cdot \text{RoundErr}\!\left(\frac{ws}{S'}\right)\cdot\frac{x}{s}  
+\text{Err} = S \cdot \text{RoundErr}\left(\frac{w}{S}\right) \cdot x, \qquad \text{Err}' = S' \cdot \text{RoundErr}\left(\frac{ws}{S'}\right)\cdot\frac{x}{s}  
 $$
 
 Take the ratio, assuming the expected rounding error is unchanged (it is, since rounding error is roughly uniform):
@@ -374,11 +374,11 @@ Push $s$ far enough that $w\cdot s$ becomes the new group max and the bet stops 
 Worked on one group of 128 from a Llama-3-8B `q_proj` row. Say the group max is $0.20$, so INT4 symmetric gives $S = 0.20/7 = 0.0286$. Channel 37 is an activation outlier with $s_X = 60$ and a modest weight $|w| = 0.05$; the other 127 channels see $s_X \approx 1$. Expected error contribution per channel is $0.25 \cdot S \cdot |x|$, and squared errors add:
 
 | $s$ on channel 37 | $S'/S$ | Total squared error |
-| --- | --- | --- |
-| 1 (plain RTN) | 1.00 | 0.190 |
-| 2 | 1.00 | 0.052 |
-| **4** | 1.00 | **0.018** |
-| 8 | 2.00 | 0.037 |
+| ----------------- | ------ | ------------------- |
+| 1 (plain RTN)     | 1.00   | 0.190               |
+| 2                 | 1.00   | 0.052               |
+| **4**             | 1.00   | **0.018**           |
+| 8                 | 2.00   | 0.037               |
 
 Two things to read off. At $s=1$, that single channel is **97%** of the group's squared error, which is Observation 1 in numbers. And the optimum is interior: $s=4$ scales the outlier right up to the existing group max and stops, while $s=8$ overshoots, doubles $S$, and taxes everyone else. A **10x reduction in squared error** from scaling one channel out of 128.
 
@@ -387,7 +387,7 @@ Two things to read off. At $s=1$, that single channel is **97%** of the group's 
 You cannot grid search thousands of independent per-channel scales, so AWQ collapses it to a single exponent on the activation statistic:
 
 $$  
-\mathbf{s} = \mathbf{s}_X^{\;\alpha}, \qquad \alpha^* = \arg\min_{\alpha \in [0,1]} \Big\| Q\big(W\,\text{diag}(\mathbf{s})\big)\big(\text{diag}(\mathbf{s})^{-1}X\big) - WX \Big\|  
+\mathbf{s} = \mathbf{s}*X^{\alpha}, \qquad \alpha^* = \arg\min*{\alpha \in [0,1]} \Big Q\big(W\text{diag}(\mathbf{s})\big)\big(\text{diag}(\mathbf{s})^{-1}X\big) - WX \Big  
 $$
 
 $\alpha = 0$ means all scales are 1, which is plain round-to-nearest. $\alpha = 1$ scales exactly in proportion to activation magnitude, which is far too aggressive and blows up $S$. The answer is in between and differs per layer, so AWQ just grid searches 20 values. In the example above, $\alpha = \ln 4/\ln 60 = 0.34$ gets you $s \approx 4$.
@@ -403,12 +403,12 @@ Two details the paper glosses over but every implementation does:
 
 This is what makes it zero-cost at runtime: you never divide activations during inference. You **fold** $1/s$ into whatever produced that activation, at export time. For a Llama-style decoder block there are four scale groups:
 
-| Scale group | Absorb $1/s$ into | Multiply by $s$ |
-| --- | --- | --- |
-| `input_layernorm` → `{q,k,v}_proj` | the RMSNorm weight vector | columns of q, k, v |
-| `v_proj` → `o_proj` | rows of `v_proj` | columns of `o_proj` |
-| `post_attention_layernorm` → `{gate,up}_proj` | the RMSNorm weight vector | columns of gate, up |
-| `up_proj` → `down_proj` | rows of `up_proj` | columns of `down_proj` |
+| Scale group                                   | Absorb $1/s$ into         | Multiply by $s$        |
+| --------------------------------------------- | ------------------------- | ---------------------- |
+| `input_layernorm` → `{q,k,v}_proj`            | the RMSNorm weight vector | columns of q, k, v     |
+| `v_proj` → `o_proj`                           | rows of `v_proj`          | columns of `o_proj`    |
+| `post_attention_layernorm` → `{gate,up}_proj` | the RMSNorm weight vector | columns of gate, up    |
+| `up_proj` → `down_proj`                       | rows of `up_proj`         | columns of `down_proj` |
 
 Worth understanding rather than memorizing:
 
@@ -428,7 +428,7 @@ On raw quality at INT4-g128 the gap is small: on Llama-2-7B, FP16 sits around 5.
 
 > **The kernel matters as much as the method.** W4A16 has no INT4 tensor core path, so the kernel loads packed INT4, dequantizes to FP16 in registers, and runs FP16 tensor core math. The win is purely bandwidth. At batch 1 you are deeply memory-bound and see ~3x, but a naive INT4 kernel loses its advantage somewhere around batch 8 to 16, because as you drift toward compute-bound the fixed dequant cost stops hiding behind memory stalls. **Marlin** (and Machete on Hopper) fixes this with better weight layouts and async copies so the speedup survives into the batch 16 to 64 range a real server operates in. In vLLM, an AWQ checkpoint on Ampere or newer dispatches to `awq_marlin` automatically; if your startup log says plain `awq`, you are leaving throughput on the table.
 
-## SmoothQuant: move the difficulty from activations to weights
+## 4) SmoothQuant: move the difficulty from activations to weights
 
 GPTQ and AWQ are weight-only (W4A16). SmoothQuant goes after the harder prize, full **W8A8**, where activations are quantized too so you get a genuine integer matmul for compute-heavy serving. The obstacle is those activation outliers again. Weights are flat and easy; activations have the few monster channels. SmoothQuant uses the same scale-shifting trick as AWQ, but aimed the other way: it smooths the activations by pushing some of their range into the weights, which tolerate it better.
 
@@ -438,7 +438,7 @@ $$
 
 The exponent $\alpha$ controls how much difficulty moves; $\alpha = 0.5$ is the usual sweet spot, which simplifies to $s_j = \sqrt{\max(|X_j|)/\max(|W_j|)}$. The one-liner to keep them straight: **AWQ** protects salient weights for memory savings (weight-only), **SmoothQuant** rebalances weights and activations for throughput (W8A8).
 
-## OmniQuant: learn the clipping and the smoothing
+## 5) OmniQuant: learn the clipping and the smoothing
 
 OmniQuant is the "make the knobs learnable" step. Instead of hand-picking clip ranges and smoothing factors, it turns them into trainable parameters and optimizes them block by block with gradient descent. It stays cheap because it only trains those few extra parameters, not the model, but it squeezes out more accuracy at low bit-widths than the hand-tuned methods.
 
