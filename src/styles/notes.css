@@ -15,6 +15,8 @@
   --notes-chip-text-active: #ffffff;
   --notes-code-bg: #f3f3f0;
   --notes-pre-bg: #0d1117;
+  /* Slightly darker than --notes-border: grid lines need to read as lines, not smudges. */
+  --notes-table-border: #d8d7d1;
 
   background: var(--notes-bg);
   color: var(--notes-text);
@@ -400,6 +402,36 @@
   .notes-root .prose p > img {
     width: 100%;
   }
+}
+
+/* Markdown (GFM) tables. Tailwind Typography only draws row separators, so the wide
+   cheat-sheet tables arrive with no outer border and no column dividers. Draw the full
+   grid, and let a too-wide table scroll on its own instead of overflowing the column. */
+.notes-root .prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border-spacing: 0;
+  border: 1px solid var(--notes-table-border);
+}
+.notes-root .prose thead {
+  background: var(--notes-surface);
+}
+.notes-root .prose thead th,
+.notes-root .prose tbody td {
+  /* Typography zeroes the outer cells' side padding, which collapses text onto the
+     new border, so set padding on all four sides for every cell. */
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--notes-table-border);
+  vertical-align: top;
+}
+.notes-root .prose thead th {
+  font-weight: 700;
+}
+.notes-root .prose tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.015);
 }
 
 /* rehype-pretty-code styling */
