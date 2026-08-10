@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="500" viewBox="0 0 860 500" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .eyebrow{font-size:10px;font-weight:700;letter-spacing:.09em}
+    .cardname{font-size:13.5px;font-weight:700;fill:#1a1a1a}
+    .key{font-size:10.5px;fill:#8a8a80}
+    .val{font-size:11px;fill:#333}
+    .barlabel{font-size:11.5px;fill:#333}
+    .barlabel b{font-weight:700}
+    .note{font-size:11px;fill:#6b6b6b}
+    .axis{font-size:11px;fill:#6b6b6b}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="499" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">The funnel: 10⁹ videos → 20 slots, in under 200 ms</text>
+  <text class="sub" x="28" y="58">Every stage is allowed to be more expensive only because the stage before it made the set smaller.</text>
+
+  <text class="eyebrow" x="28" y="90" fill="#8a8a80">HOW MANY VIDEOS ARE STILL IN PLAY</text>
+
+  <rect x="28" y="100" width="702" height="20" rx="3" fill="#dadce0"/>
+  <text class="barlabel" x="740" y="114">the corpus, ~10⁹</text>
+
+  <rect x="28" y="128" width="234" height="20" rx="3" fill="#1a73e8"/>
+  <text class="barlabel" x="272" y="142">~1,000 after retrieval</text>
+
+  <rect x="28" y="156" width="133" height="20" rx="3" fill="#d93025"/>
+  <text class="barlabel" x="171" y="170">~50 after ranking</text>
+
+  <rect x="28" y="184" width="101" height="20" rx="3" fill="#1e8e3e"/>
+  <text class="barlabel" x="139" y="198">~20 actually shown</text>
+
+  <text class="note" x="28" y="226">Bar length is log₁₀(count). Each step down is not “a bit smaller” — it is a whole order of magnitude smaller.</text>
+
+  <!-- stage cards -->
+  <g>
+    <rect x="28" y="250" width="180" height="155" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="28" y="250" width="180" height="4" rx="2" fill="#1a73e8"/>
+    <text class="eyebrow" x="42" y="274" fill="#1a73e8">STAGE 1</text>
+    <text class="cardname" x="42" y="296">Candidate</text>
+    <text class="cardname" x="42" y="312">generation</text>
+    <line x1="42" y1="324" x2="194" y2="324" stroke="#ecebe4"/>
+    <text class="key" x="42" y="344">in → out</text>
+    <text class="val mono" x="104" y="344">10⁹ → 1k</text>
+    <text class="key" x="42" y="364">budget</text>
+    <text class="val mono" x="104" y="364">~20 ms</text>
+    <text class="key" x="42" y="384">model</text>
+    <text class="val" x="104" y="384">two-tower</text>
+    <text class="val" x="104" y="398">+ ANN index</text>
+  </g>
+
+  <g>
+    <rect x="236" y="250" width="180" height="155" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="236" y="250" width="180" height="4" rx="2" fill="#f9ab00"/>
+    <text class="eyebrow" x="250" y="274" fill="#b06000">STAGE 2</text>
+    <text class="cardname" x="250" y="296">Filtering</text>
+    <line x1="250" y1="324" x2="402" y2="324" stroke="#ecebe4"/>
+    <text class="key" x="250" y="344">in → out</text>
+    <text class="val mono" x="312" y="344">1k → ~800</text>
+    <text class="key" x="250" y="364">budget</text>
+    <text class="val mono" x="312" y="364">~5 ms</text>
+    <text class="key" x="250" y="384">model</text>
+    <text class="val" x="312" y="384">none — rules:</text>
+    <text class="val" x="312" y="398">watched, policy</text>
+  </g>
+
+  <g>
+    <rect x="444" y="250" width="180" height="155" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="444" y="250" width="180" height="4" rx="2" fill="#d93025"/>
+    <text class="eyebrow" x="458" y="274" fill="#d93025">STAGE 3</text>
+    <text class="cardname" x="458" y="296">Ranking</text>
+    <line x1="458" y1="324" x2="610" y2="324" stroke="#ecebe4"/>
+    <text class="key" x="458" y="344">in → out</text>
+    <text class="val mono" x="520" y="344">800 → 50</text>
+    <text class="key" x="458" y="364">budget</text>
+    <text class="val mono" x="520" y="364">~40 ms</text>
+    <text class="key" x="458" y="384">model</text>
+    <text class="val" x="520" y="384">MMoE, multi-</text>
+    <text class="val" x="520" y="398">task, crosses</text>
+  </g>
+
+  <g>
+    <rect x="652" y="250" width="180" height="155" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="652" y="250" width="180" height="4" rx="2" fill="#1e8e3e"/>
+    <text class="eyebrow" x="666" y="274" fill="#1e8e3e">STAGE 4</text>
+    <text class="cardname" x="666" y="296">Re-ranking</text>
+    <line x1="666" y1="324" x2="818" y2="324" stroke="#ecebe4"/>
+    <text class="key" x="666" y="344">in → out</text>
+    <text class="val mono" x="728" y="344">50 → ~20</text>
+    <text class="key" x="666" y="364">budget</text>
+    <text class="val mono" x="728" y="364">~10 ms</text>
+    <text class="key" x="666" y="384">model</text>
+    <text class="val" x="728" y="384">DPP diversity,</text>
+    <text class="val" x="728" y="398">freshness</text>
+  </g>
+
+  <!-- connectors -->
+  <g fill="none" stroke="#c9c7bf" stroke-width="1.6">
+    <path d="M210 327 h20" marker-end="url(#ar)"/>
+    <path d="M418 327 h20" marker-end="url(#ar)"/>
+    <path d="M626 327 h20" marker-end="url(#ar)"/>
+  </g>
+  <defs>
+    <marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 z" fill="#c9c7bf"/>
+    </marker>
+    <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9a988f"/>
+    </marker>
+  </defs>
+
+  <line x1="28" y1="440" x2="826" y2="440" stroke="#9a988f" stroke-width="1.4" marker-end="url(#ar2)"/>
+  <text class="axis" x="28" y="463">cheap · high recall · looks at everything</text>
+  <text class="axis" x="832" y="463" text-anchor="end">expensive · high precision · looks at almost nothing</text>
+  <text class="axis" x="430" y="432" text-anchor="middle" font-style="italic">compute spent per candidate grows ~1,000× left to right</text>
+</svg>

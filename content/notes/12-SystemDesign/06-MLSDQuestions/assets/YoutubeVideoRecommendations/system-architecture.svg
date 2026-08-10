@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="620" viewBox="0 0 860 620" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .colh{font-size:11px;font-weight:700;letter-spacing:.09em}
+    .bt{font-size:12.5px;font-weight:700;fill:#1a1a1a}
+    .bs{font-size:10.5px;fill:#6b6b6b}
+    .small{font-size:11px;fill:#6b6b6b}
+    .loop{font-size:11.5px;font-weight:600;fill:#8a5400}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="619" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">The whole system, the way I would draw it on the board</text>
+  <text class="sub" x="28" y="58">Read it as two columns: on the right, what happens in the 200 ms. On the left, the artifact each of those steps is reading from.</text>
+
+  <text class="colh" x="48" y="90" fill="#8a8a80">BUILT OFFLINE &amp; NEARLINE</text>
+  <text class="colh" x="474" y="90" fill="#1a73e8">ONLINE — INSIDE THE 200 ms</text>
+
+  <!-- ===== LEFT COLUMN ===== -->
+  <g>
+    <rect x="48" y="102" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="124">Log warehouse</text>
+    <text class="bs" x="64" y="142">~10¹¹ impressions a day · negatives heavily downsampled</text>
+
+    <rect x="48" y="164" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="186">Feature store</text>
+    <text class="bs" x="64" y="204">Redis / Bigtable KV · session counters via Kafka → Flink</text>
+
+    <rect x="48" y="226" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="248">ANN index</text>
+    <text class="bs" x="64" y="266">10⁹ video vectors · rebuilt nightly, upserted every few minutes</text>
+
+    <rect x="48" y="288" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="310">Suppression lists</text>
+    <text class="bs" x="64" y="328">already-watched history · policy and safety verdicts</text>
+
+    <rect x="48" y="350" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="372">MMoE ranker</text>
+    <text class="bs" x="64" y="390">retrained daily · canaried at 1% traffic before any ramp</text>
+
+    <rect x="48" y="412" width="348" height="52" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <text class="bt" x="64" y="434">Slate config</text>
+    <text class="bs" x="64" y="452">similarity kernel · freshness decay · per-creator caps</text>
+  </g>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <g>
+    <rect x="474" y="104" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="104" width="4" height="48" fill="#9aa0a6"/>
+    <text class="bt" x="492" y="124">Request in</text>
+    <text class="bs" x="492" y="141">user opens the home feed</text>
+
+    <rect x="474" y="166" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="166" width="4" height="48" fill="#a142f4"/>
+    <text class="bt" x="492" y="186">Fetch user + context features</text>
+    <text class="bs" x="492" y="203">history, geo, device, time of day · ~15 ms</text>
+
+    <rect x="474" y="228" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="228" width="4" height="48" fill="#1a73e8"/>
+    <text class="bt" x="492" y="248">Retrieval — ANN top ~1,000</text>
+    <text class="bs" x="492" y="265">plus subscriptions, trending, co-watch · ~20 ms</text>
+
+    <rect x="474" y="290" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="290" width="4" height="48" fill="#f9ab00"/>
+    <text class="bt" x="492" y="310">Filter</text>
+    <text class="bs" x="492" y="327">already watched · policy · near-duplicate dedup · ~5 ms</text>
+
+    <rect x="474" y="352" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="352" width="4" height="48" fill="#d93025"/>
+    <text class="bt" x="492" y="372">Rank — one MMoE pass → top 50</text>
+    <text class="bs" x="492" y="389">all heads at once, batched on an accelerator · ~40 ms</text>
+
+    <rect x="474" y="414" width="338" height="48" rx="7" fill="#ffffff" stroke="#e2e0d9"/>
+    <rect x="474" y="414" width="4" height="48" fill="#1e8e3e"/>
+    <text class="bt" x="492" y="434">Re-rank the slate</text>
+    <text class="bs" x="492" y="451">DPP diversity · freshness · creator caps · ~10 ms</text>
+
+    <rect x="474" y="476" width="338" height="48" rx="7" fill="#e8f0fe" stroke="#a8c7f5"/>
+    <rect x="474" y="476" width="4" height="48" fill="#1a73e8"/>
+    <text class="bt" x="492" y="496" fill="#1a4fa0">~20 videos rendered</text>
+    <text class="bs" x="492" y="513">and every one of them is logged as an impression</text>
+  </g>
+
+  <!-- vertical flow in right column -->
+  <g stroke="#b8b6ad" stroke-width="1.5" fill="none">
+    <path d="M643 152 v10" marker-end="url(#s)"/>
+    <path d="M643 214 v10" marker-end="url(#s)"/>
+    <path d="M643 276 v10" marker-end="url(#s)"/>
+    <path d="M643 338 v10" marker-end="url(#s)"/>
+    <path d="M643 400 v10" marker-end="url(#s)"/>
+    <path d="M643 462 v10" marker-end="url(#s)"/>
+  </g>
+  <!-- supply arrows -->
+  <g stroke="#9a988f" stroke-width="1.5" stroke-dasharray="5 3" fill="none">
+    <path d="M396 190 h72" marker-end="url(#s)"/>
+    <path d="M396 252 h72" marker-end="url(#s)"/>
+    <path d="M396 314 h72" marker-end="url(#s)"/>
+    <path d="M396 376 h72" marker-end="url(#s)"/>
+    <path d="M396 438 h72" marker-end="url(#s)"/>
+  </g>
+  <defs>
+    <marker id="s" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#9a988f"/></marker>
+    <marker id="lp" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#f9ab00"/></marker>
+  </defs>
+
+  <!-- the loop -->
+  <path d="M643 524 v34 H34 V128 h10" fill="none" stroke="#f9ab00" stroke-width="2.2" marker-end="url(#lp)"/>
+  <text class="loop" x="340" y="551" text-anchor="middle">impressions, watch time, skips, “not interested” — all of it flows back</text>
+
+  <line x1="28" y1="572" x2="832" y2="572" stroke="#ecebe4"/>
+  <text class="small" x="28" y="594">That amber line is the part people forget to draw, and it is the one that decides the system's long-run behaviour: what I choose to show today is</text>
+  <text class="small" x="28" y="610">the only data I will have to learn from tomorrow. Every bias in the serving policy is a bias in the next training set.</text>
+</svg>

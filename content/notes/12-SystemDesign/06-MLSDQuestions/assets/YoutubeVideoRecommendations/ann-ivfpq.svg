@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="470" viewBox="0 0 860 470" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .ptitle{font-size:13.5px;font-weight:700;fill:#1a1a1a}
+    .item{font-size:11.5px;fill:#3a3a3a}
+    .small{font-size:11px;fill:#6b6b6b}
+    .big{font-size:15px;font-weight:700;fill:#1a1a1a}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="469" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">What “IVF-PQ” is actually doing</text>
+  <text class="sub" x="28" y="58">Two independent tricks that get bolted together: one cuts how many vectors you look at, the other cuts what each vector costs.</text>
+
+  <rect x="28" y="80" width="376" height="360" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="428" y="80" width="404" height="360" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+
+  <text class="ptitle" x="46" y="106">IVF — search a few neighbourhoods, not the map</text>
+  <text class="ptitle" x="446" y="106">PQ — store a postcode, not the full address</text>
+
+  <!-- ===== IVF panel ===== -->
+  <rect x="60" y="126" width="320" height="220" fill="#fdfdfb" stroke="#d8d6ce"/>
+  <!-- probed cells -->
+  <polygon points="148.6,200.9 263.9,195.4 277.5,295.2 140.6,288.8" fill="#e8f0fe" stroke="#1a73e8" stroke-width="1.6"/>
+  <polygon points="263.9,195.4 380,190 380,300 277.5,295.2" fill="#e8f0fe" stroke="#1a73e8" stroke-width="1.6"/>
+  <!-- partition lines -->
+  <g stroke="#c4c2ba" stroke-width="1.1">
+    <line x1="155" y1="126" x2="135" y2="346"/>
+    <line x1="255" y1="126" x2="285" y2="346"/>
+    <line x1="60" y1="201" x2="380" y2="186"/>
+    <line x1="60" y1="281" x2="380" y2="296"/>
+  </g>
+  <!-- data points -->
+  <g fill="#b8b6ad">
+    <circle cx="88" cy="150" r="2.6"/><circle cx="120" cy="175" r="2.6"/><circle cx="99" cy="188" r="2.6"/>
+    <circle cx="190" cy="146" r="2.6"/><circle cx="228" cy="168" r="2.6"/><circle cx="205" cy="182" r="2.6"/>
+    <circle cx="300" cy="145" r="2.6"/><circle cx="345" cy="166" r="2.6"/><circle cx="318" cy="178" r="2.6"/>
+    <circle cx="82" cy="228" r="2.6"/><circle cx="115" cy="252" r="2.6"/><circle cx="95" cy="268" r="2.6"/>
+    <circle cx="172" cy="222" r="2.6"/><circle cx="240" cy="268" r="2.6"/><circle cx="196" cy="272" r="2.6"/><circle cx="255" cy="228" r="2.6"/>
+    <circle cx="300" cy="222" r="2.6"/><circle cx="352" cy="252" r="2.6"/><circle cx="322" cy="272" r="2.6"/>
+    <circle cx="86" cy="306" r="2.6"/><circle cx="120" cy="330" r="2.6"/>
+    <circle cx="200" cy="312" r="2.6"/><circle cx="240" cy="334" r="2.6"/>
+    <circle cx="310" cy="315" r="2.6"/><circle cx="355" cy="336" r="2.6"/>
+  </g>
+  <!-- centroids -->
+  <g fill="#5f6368">
+    <circle cx="105" cy="165" r="4"/><circle cx="205" cy="162" r="4"/><circle cx="325" cy="158" r="4"/>
+    <circle cx="100" cy="243" r="4"/><circle cx="325" cy="243" r="4"/>
+    <circle cx="98" cy="318" r="4"/><circle cx="210" cy="320" r="4"/><circle cx="330" cy="322" r="4"/>
+  </g>
+  <circle cx="205" cy="243" r="4" fill="#1a73e8"/>
+  <!-- query -->
+  <g>
+    <circle cx="232" cy="232" r="7" fill="none" stroke="#d93025" stroke-width="1.6"/>
+    <circle cx="232" cy="232" r="3" fill="#d93025"/>
+    <text class="small" x="243" y="222" fill="#a5261c">query u</text>
+  </g>
+  <text class="small" x="220" y="364" text-anchor="middle">grey dots = video vectors · large dots = cell centroids</text>
+
+  <text class="item" x="46" y="388">Cluster all 10⁹ vectors once with k-means into ~10⁵ cells.</text>
+  <text class="item" x="46" y="406">At query time, compare u to the 10⁵ centroids, then fully scan only</text>
+  <text class="item" x="46" y="424">the nearest few (nprobe ≈ 8) — about 10⁵ vectors, not 10⁹.</text>
+
+  <!-- ===== PQ panel ===== -->
+  <text class="small" x="446" y="140">one 64-dim video vector, sliced into 8 sub-vectors of 8 dims</text>
+  <g fill="#dfe8fb" stroke="#b9cef4">
+    <rect x="452" y="150" width="32" height="15"/><rect x="493" y="150" width="32" height="15"/><rect x="534" y="150" width="32" height="15"/><rect x="575" y="150" width="32" height="15"/>
+    <rect x="616" y="150" width="32" height="15"/><rect x="657" y="150" width="32" height="15"/><rect x="698" y="150" width="32" height="15"/><rect x="739" y="150" width="32" height="15"/>
+  </g>
+  <g stroke="#8a8a80" stroke-width="1.5">
+    <line x1="468" y1="167" x2="468" y2="182" marker-end="url(#p)"/><line x1="509" y1="167" x2="509" y2="182" marker-end="url(#p)"/>
+    <line x1="550" y1="167" x2="550" y2="182" marker-end="url(#p)"/><line x1="591" y1="167" x2="591" y2="182" marker-end="url(#p)"/>
+    <line x1="632" y1="167" x2="632" y2="182" marker-end="url(#p)"/><line x1="673" y1="167" x2="673" y2="182" marker-end="url(#p)"/>
+    <line x1="714" y1="167" x2="714" y2="182" marker-end="url(#p)"/><line x1="755" y1="167" x2="755" y2="182" marker-end="url(#p)"/>
+  </g>
+  <defs>
+    <marker id="p" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#8a8a80"/></marker>
+  </defs>
+  <g fill="#f7f6f2" stroke="#c4c2ba">
+    <rect x="452" y="186" width="32" height="22" rx="3"/><rect x="493" y="186" width="32" height="22" rx="3"/><rect x="534" y="186" width="32" height="22" rx="3"/><rect x="575" y="186" width="32" height="22" rx="3"/>
+    <rect x="616" y="186" width="32" height="22" rx="3"/><rect x="657" y="186" width="32" height="22" rx="3"/><rect x="698" y="186" width="32" height="22" rx="3"/><rect x="739" y="186" width="32" height="22" rx="3"/>
+  </g>
+  <g class="mono" font-size="10.5px" fill="#3a3a3a" text-anchor="middle">
+    <text x="468" y="201">2f</text><text x="509" y="201">a1</text><text x="550" y="201">07</text><text x="591" y="201">c4</text>
+    <text x="632" y="201">1b</text><text x="673" y="201">90</text><text x="714" y="201">3e</text><text x="755" y="201">d2</text>
+  </g>
+  <text class="small" x="446" y="230">each chunk is replaced by the id of its nearest of 256 sub-centroids → 1 byte</text>
+
+  <rect x="452" y="246" width="360" height="82" rx="7" fill="#e6f4ea" stroke="#b7dfc4"/>
+  <text class="big mono" x="632" y="272" text-anchor="middle">64 × 4 B = 256 B  →  8 B</text>
+  <text class="item" x="632" y="292" text-anchor="middle">32× smaller, per vector</text>
+  <text class="item mono" x="632" y="314" text-anchor="middle" fill="#137333">at 10⁹ videos:  256 GB  →  8 GB</text>
+
+  <text class="item" x="446" y="356">Distances are then read out of a small precomputed lookup table over</text>
+  <text class="item" x="446" y="374">those codes, so nothing is ever decompressed.</text>
+  <text class="item" x="446" y="398">The trade is honest: you lose a little precision on the ordering, and in</text>
+  <text class="item" x="446" y="416">exchange the index fits in memory at all. Retrieval can afford that loss —</text>
+  <text class="item" x="446" y="434">ranking will re-score everything properly anyway.</text>
+
+  <text class="small" x="430" y="458" text-anchor="middle" font-style="italic">IVF decides how many vectors you touch. PQ decides what each one costs. HNSW is an alternative to the first half, not the second.</text>
+</svg>

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="450" viewBox="0 0 860 450" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .axl{font-size:11px;fill:#6b6b6b}
+    .cellp{font-size:13px;font-weight:700;fill:#1e8e3e}
+    .celln{font-size:13px;fill:#b0aea6}
+    .boxtitle{font-size:12.5px;font-weight:700;fill:#1a1a1a}
+    .item{font-size:11.5px;fill:#3a3a3a}
+    .small{font-size:11px;fill:#6b6b6b}
+    .f{font-size:13.5px;fill:#1a1a1a}
+    .sup{font-size:9.5px}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="449" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">In-batch sampled softmax: negatives you get for free</text>
+  <text class="sub" x="28" y="58">Retrieval is not “did this user click, yes or no.” It is “out of everything, why this one?” — so I train it that way.</text>
+
+  <!-- matrix -->
+  <text class="axl" x="190" y="94" text-anchor="middle">videos in the batch →</text>
+  <g class="axl">
+    <text x="95"  y="110" text-anchor="middle">v₁</text>
+    <text x="133" y="110" text-anchor="middle">v₂</text>
+    <text x="171" y="110" text-anchor="middle">v₃</text>
+    <text x="209" y="110" text-anchor="middle">v₄</text>
+    <text x="247" y="110" text-anchor="middle">v₅</text>
+    <text x="285" y="110" text-anchor="middle">v₆</text>
+    <text x="68" y="141" text-anchor="end">u₁</text>
+    <text x="68" y="179" text-anchor="end">u₂</text>
+    <text x="68" y="217" text-anchor="end">u₃</text>
+    <text x="68" y="255" text-anchor="end">u₄</text>
+    <text x="68" y="293" text-anchor="end">u₅</text>
+    <text x="68" y="331" text-anchor="end">u₆</text>
+  </g>
+
+  <g stroke="#e6e4dd" fill="#ffffff">
+    <rect x="76"  y="118" width="38" height="38"/><rect x="114" y="118" width="38" height="38"/><rect x="152" y="118" width="38" height="38"/><rect x="190" y="118" width="38" height="38"/><rect x="228" y="118" width="38" height="38"/><rect x="266" y="118" width="38" height="38"/>
+    <rect x="76"  y="156" width="38" height="38"/><rect x="114" y="156" width="38" height="38"/><rect x="152" y="156" width="38" height="38"/><rect x="190" y="156" width="38" height="38"/><rect x="228" y="156" width="38" height="38"/><rect x="266" y="156" width="38" height="38"/>
+    <rect x="76"  y="194" width="38" height="38"/><rect x="114" y="194" width="38" height="38"/><rect x="152" y="194" width="38" height="38"/><rect x="190" y="194" width="38" height="38"/><rect x="228" y="194" width="38" height="38"/><rect x="266" y="194" width="38" height="38"/>
+    <rect x="76"  y="232" width="38" height="38"/><rect x="114" y="232" width="38" height="38"/><rect x="152" y="232" width="38" height="38"/><rect x="190" y="232" width="38" height="38"/><rect x="228" y="232" width="38" height="38"/><rect x="266" y="232" width="38" height="38"/>
+    <rect x="76"  y="270" width="38" height="38"/><rect x="114" y="270" width="38" height="38"/><rect x="152" y="270" width="38" height="38"/><rect x="190" y="270" width="38" height="38"/><rect x="228" y="270" width="38" height="38"/><rect x="266" y="270" width="38" height="38"/>
+    <rect x="76"  y="308" width="38" height="38"/><rect x="114" y="308" width="38" height="38"/><rect x="152" y="308" width="38" height="38"/><rect x="190" y="308" width="38" height="38"/><rect x="228" y="308" width="38" height="38"/><rect x="266" y="308" width="38" height="38"/>
+  </g>
+  <!-- diagonal positives -->
+  <g fill="#e6f4ea" stroke="#1e8e3e">
+    <rect x="76"  y="118" width="38" height="38"/>
+    <rect x="114" y="156" width="38" height="38"/>
+    <rect x="152" y="194" width="38" height="38"/>
+    <rect x="190" y="232" width="38" height="38"/>
+    <rect x="228" y="270" width="38" height="38"/>
+    <rect x="266" y="308" width="38" height="38"/>
+  </g>
+  <g class="cellp">
+    <text x="95"  y="142" text-anchor="middle">+</text>
+    <text x="133" y="180" text-anchor="middle">+</text>
+    <text x="171" y="218" text-anchor="middle">+</text>
+    <text x="209" y="256" text-anchor="middle">+</text>
+    <text x="247" y="294" text-anchor="middle">+</text>
+    <text x="285" y="332" text-anchor="middle">+</text>
+  </g>
+  <g class="celln">
+    <text x="133" y="142" text-anchor="middle">−</text><text x="171" y="142" text-anchor="middle">−</text><text x="209" y="142" text-anchor="middle">−</text><text x="247" y="142" text-anchor="middle">−</text><text x="285" y="142" text-anchor="middle">−</text>
+    <text x="95"  y="180" text-anchor="middle">−</text><text x="171" y="180" text-anchor="middle">−</text><text x="209" y="180" text-anchor="middle">−</text><text x="247" y="180" text-anchor="middle">−</text><text x="285" y="180" text-anchor="middle">−</text>
+    <text x="95"  y="218" text-anchor="middle">−</text><text x="133" y="218" text-anchor="middle">−</text><text x="209" y="218" text-anchor="middle">−</text><text x="247" y="218" text-anchor="middle">−</text><text x="285" y="218" text-anchor="middle">−</text>
+    <text x="95"  y="256" text-anchor="middle">−</text><text x="133" y="256" text-anchor="middle">−</text><text x="171" y="256" text-anchor="middle">−</text><text x="247" y="256" text-anchor="middle">−</text><text x="285" y="256" text-anchor="middle">−</text>
+    <text x="95"  y="294" text-anchor="middle">−</text><text x="133" y="294" text-anchor="middle">−</text><text x="171" y="294" text-anchor="middle">−</text><text x="209" y="294" text-anchor="middle">−</text><text x="285" y="294" text-anchor="middle">−</text>
+    <text x="95"  y="332" text-anchor="middle">−</text><text x="133" y="332" text-anchor="middle">−</text><text x="171" y="332" text-anchor="middle">−</text><text x="209" y="332" text-anchor="middle">−</text><text x="247" y="332" text-anchor="middle">−</text>
+  </g>
+  <rect x="73" y="115" width="234" height="44" rx="4" fill="none" stroke="#1a73e8" stroke-width="2"/>
+  <text class="small" x="190" y="368" text-anchor="middle">each cell is ⟨uᵢ, vⱼ⟩ · one row = one softmax</text>
+  <text class="small" x="190" y="386" text-anchor="middle">drawn with B = 6; in production B is 8k+</text>
+
+  <!-- right cards -->
+  <rect x="344" y="88" width="488" height="152" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+  <text class="boxtitle" x="364" y="112">The loss, read straight off the picture</text>
+  <text class="item" x="364" y="134">The diagonal is the only thing that really happened: user u<tspan class="sup" dy="3">i</tspan><tspan dy="-3"> watched v</tspan><tspan class="sup" dy="3">i</tspan><tspan dy="-3">.</tspan></text>
+  <text class="item" x="364" y="152">Every other video in the batch becomes a negative for that user, at zero extra cost.</text>
+  <rect x="364" y="164" width="448" height="56" rx="6" fill="#f7f6f2" stroke="#ecebe4"/>
+  <text class="f mono" x="588" y="188" text-anchor="middle">P(v<tspan class="sup" dy="3">i</tspan><tspan dy="-3"> | u</tspan><tspan class="sup" dy="3">i</tspan><tspan dy="-3">) = exp⟨u</tspan><tspan class="sup" dy="3">i</tspan><tspan dy="-3">, v</tspan><tspan class="sup" dy="3">i</tspan><tspan dy="-3">⟩ ⁄ Σ</tspan><tspan class="sup" dy="3">j∈B</tspan><tspan dy="-3"> exp⟨u</tspan><tspan class="sup" dy="3">i</tspan><tspan dy="-3">, v</tspan><tspan class="sup" dy="3">j</tspan><tspan dy="-3">⟩</tspan></text>
+  <text class="small" x="588" y="209" text-anchor="middle">cross-entropy against the diagonal — pull the green cell up, push its row down</text>
+
+  <rect x="344" y="256" width="488" height="156" rx="8" fill="#fff7f6" stroke="#f3c9c4"/>
+  <text class="boxtitle" x="364" y="280" fill="#a5261c">The bug this creates, and the one-line fix</text>
+  <text class="item" x="364" y="302">A megahit video lands in almost every batch, so it is punished as a negative</text>
+  <text class="item" x="364" y="320">thousands of times more often than a long-tail video. The model learns</text>
+  <text class="item" x="364" y="338">“popular = bad,” which is the opposite of true.</text>
+  <rect x="364" y="350" width="448" height="44" rx="6" fill="#ffffff" stroke="#f3c9c4"/>
+  <text class="f mono" x="588" y="370" text-anchor="middle">s′(u, v) = ⟨u, v⟩ − log Q(v)</text>
+  <text class="small" x="588" y="387" text-anchor="middle">logQ correction: subtract how likely v was to be sampled at all</text>
+
+  <text class="small" x="430" y="435" text-anchor="middle" font-style="italic">Mentioning logQ unprompted is one of the cheapest ways to show you have actually shipped one of these.</text>
+</svg>

@@ -1,9 +1,10 @@
-import type { ComponentProps } from 'react';
+import { Children, isValidElement, type ComponentProps, type ReactNode } from 'react';
 import { stripOrderPrefixPath } from '../../lib/notes-shared';
 import { withBase } from '../../lib/site';
 
 type ImgProps = ComponentProps<'img'>;
 type AnchorProps = ComponentProps<'a'>;
+type ParagraphProps = ComponentProps<'p'>;
 
 /**
  * Build an MDX component map for a specific post.
@@ -53,5 +54,22 @@ export function mdxComponentsFor(postDir: string) {
     return <a href={finalHref} {...rest} />;
   };
 
-  return { img: Img, a: Anchor };
+  // Markdown wraps a standalone image in a <p>, but a captioned image renders as a
+  // <figure>, and <figure> inside <p> is invalid HTML: the browser closes the <p>
+  // early, so the server markup and the client tree disagree and hydration fails.
+  // Unwrap those paragraphs. Captionless images stay inside their <p> so the
+  // `p > img` grid rule in notes.css keeps laying them out side by side.
+  const isCaptionedImage = (node: ReactNode) =>
+    isValidElement<ImgProps>(node) &&
+    node.type === Img &&
+    typeof node.props.alt === 'string' &&
+    node.props.alt.trim().length > 0;
+
+  const Paragraph = ({ children, ...rest }: ParagraphProps) => {
+    const kids = Children.toArray(children);
+    if (kids.length === 1 && isCaptionedImage(kids[0])) return <>{children}</>;
+    return <p {...rest}>{children}</p>;
+  };
+
+  return { img: Img, a: Anchor, p: Paragraph };
 }

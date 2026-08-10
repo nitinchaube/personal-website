@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="570" viewBox="0 0 860 570" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .ptitle{font-size:13.5px;font-weight:700}
+    .vlab{font-size:11.5px;font-weight:600;fill:#3a3a3a}
+    .item{font-size:11.5px;fill:#3a3a3a}
+    .small{font-size:11px;fill:#6b6b6b}
+    .f{font-size:13px;fill:#1a1a1a}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="569" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">A determinant is a volume — that is the whole idea behind DPP</text>
+  <text class="sub" x="28" y="58">Two videos that say the same thing point the same way, and two parallel arrows enclose no area. Redundancy zeroes itself out.</text>
+
+  <rect x="28" y="84" width="388" height="310" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="444" y="84" width="388" height="310" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <text class="ptitle" x="46" y="110" fill="#a5261c">Two near-duplicates</text>
+  <text class="ptitle" x="462" y="110" fill="#137333">Two genuinely different videos</text>
+
+  <!-- LEFT: sliver -->
+  <polygon points="110,320 234,287 345,235 221,268" fill="#d93025" fill-opacity="0.16" stroke="#d93025" stroke-dasharray="4 3"/>
+  <g stroke="#d93025" stroke-width="2.2" fill="none">
+    <line x1="110" y1="320" x2="234" y2="287" marker-end="url(#r)"/>
+    <line x1="110" y1="320" x2="221" y2="268" marker-end="url(#r)"/>
+  </g>
+  <path d="M142.8,311.2 A34,34 0 0 0 140.8,305.6" fill="none" stroke="#8a8a80" stroke-width="1.2"/>
+  <text class="small" x="156" y="303">θ ≈ 10°</text>
+  <text class="vlab" x="243" y="292">“iPhone 17 review”</text>
+  <text class="vlab" x="230" y="264">“iPhone 17 — full review”</text>
+  <text class="small" x="240" y="230" fill="#a5261c">area ≈ 0</text>
+
+  <!-- RIGHT: fat -->
+  <polygon points="526,320 652,298 663,175 537,197" fill="#1e8e3e" fill-opacity="0.14" stroke="#1e8e3e" stroke-dasharray="4 3"/>
+  <g stroke="#1e8e3e" stroke-width="2.2" fill="none">
+    <line x1="526" y1="320" x2="652" y2="298" marker-end="url(#g)"/>
+    <line x1="526" y1="320" x2="537" y2="197" marker-end="url(#g)"/>
+  </g>
+  <path d="M559.5,314.1 A34,34 0 0 0 529,286.1" fill="none" stroke="#8a8a80" stroke-width="1.2"/>
+  <text class="small" x="566" y="300">θ ≈ 75°</text>
+  <text class="vlab" x="661" y="303">“iPhone 17 review”</text>
+  <text class="vlab" x="546" y="192">“slow-cooked ragù”</text>
+  <text class="small" x="600" y="250" fill="#137333">large area</text>
+
+  <defs>
+    <marker id="r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#d93025"/></marker>
+    <marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1e8e3e"/></marker>
+  </defs>
+
+  <text class="f mono" x="222" y="352" text-anchor="middle">det = q₁²q₂² (1 − cos²θ) ≈ 0.03 · q₁²q₂²</text>
+  <text class="small" x="222" y="374" text-anchor="middle">both are great videos, but the pair is worth almost nothing</text>
+  <text class="f mono" x="638" y="352" text-anchor="middle">det = q₁²q₂² (1 − cos²θ) ≈ 0.93 · q₁²q₂²</text>
+  <text class="small" x="638" y="374" text-anchor="middle">the pair keeps nearly all of the quality it started with</text>
+
+  <!-- kernel band -->
+  <rect x="28" y="412" width="804" height="66" rx="8" fill="#e8f0fe" stroke="#a8c7f5"/>
+  <text class="f mono" x="48" y="440" fill="#1a4fa0">L = diag(q) · S · diag(q)          P(slate) ∝ det(L_S)</text>
+  <text class="small" x="48" y="462">q = per-video quality from the ranker · S = cosine similarity between video embeddings · so relevance scales the vectors, similarity sets the angle</text>
+
+  <!-- slates -->
+  <text class="small" x="28" y="504">sort by score alone</text>
+  <g>
+    <rect x="150" y="490" width="62" height="34" rx="5" fill="#f5b7b2"/><rect x="220" y="490" width="62" height="34" rx="5" fill="#f3aca6"/>
+    <rect x="290" y="490" width="62" height="34" rx="5" fill="#f5b7b2"/><rect x="360" y="490" width="62" height="34" rx="5" fill="#f19f98"/>
+    <rect x="430" y="490" width="62" height="34" rx="5" fill="#f5b7b2"/><rect x="500" y="490" width="62" height="34" rx="5" fill="#f3aca6"/>
+  </g>
+  <text class="small" x="578" y="512" fill="#a5261c">six versions of the same video</text>
+
+  <text class="small" x="28" y="546">after DPP</text>
+  <g>
+    <rect x="150" y="532" width="62" height="34" rx="5" fill="#f5b7b2"/><rect x="220" y="532" width="62" height="34" rx="5" fill="#a8c7f5"/>
+    <rect x="290" y="532" width="62" height="34" rx="5" fill="#a5d6b6"/><rect x="360" y="532" width="62" height="34" rx="5" fill="#e5cf94"/>
+    <rect x="430" y="532" width="62" height="34" rx="5" fill="#cfa6ea"/><rect x="500" y="532" width="62" height="34" rx="5" fill="#f3aca6"/>
+  </g>
+  <text class="small" x="578" y="554" fill="#137333">a session someone might actually finish</text>
+</svg>
