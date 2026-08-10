@@ -63,13 +63,13 @@ The two halves behave very differently:
 - **Database side.** $S_{db}$ is the hidden database. The agent changes it only by calling tools, and the result is **deterministic**, the same call on the same database always produces the same outcome:
 
 $$  
-T_{db}: (s_{db}, a_{db}) \mapsto (s'*{db}, o*{db})  
+T_{db}: (s_{db}, a_{db}) \mapsto (s'_{db}, o_{db})  
 $$
 
 - **User side.** $S_{user}$ is the hidden task instruction plus the conversation so far. When the agent sends a message, a language model samples the user's reply, so this side is **stochastic**, the same message can get different responses:
 
 $$  
-T_{user}: (s_{user}, a_{user}) \mapsto (s'*{user}, o*{user})  
+T_{user}: (s_{user}, a_{user}) \mapsto (s'_{user}, o_{user})  
 $$
 
 The episode ends when the user simulator outputs `###STOP###`, and only then is the agent scored.

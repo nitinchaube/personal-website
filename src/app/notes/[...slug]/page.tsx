@@ -11,6 +11,7 @@ import { getAdjacentNotes, getAllSlugSegments, getNoteBySlug } from '../../../li
 import PostHeader from '../../../components/notes/PostHeader';
 import PrevNext from '../../../components/notes/PrevNext';
 import Toc from '../../../components/notes/Toc';
+import MobileToc from '../../../components/notes/MobileToc';
 import { mdxComponentsFor } from '../../../components/notes/mdx-components';
 
 export async function generateStaticParams() {
@@ -80,6 +81,7 @@ export default async function NotePage({ params }: { params: { slug: string[] } 
           </div>
         </aside>
       </div>
+      <MobileToc selector='.notes-article' />
     </main>
   );
 }

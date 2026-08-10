@@ -750,6 +750,98 @@
     transform: none;
   }
 }
+/* Mobile TOC: floating trigger + bottom sheet (the right rail is hidden below lg) */
+.notes-root .notes-toc-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 15px;
+  border: 1px solid var(--notes-border);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(20, 20, 20, 0.14), 0 2px 6px rgba(20, 20, 20, 0.06);
+  font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--notes-text);
+  cursor: pointer;
+}
+.notes-root .notes-toc-fab svg {
+  width: 15px;
+  height: 15px;
+}
+.notes-root .notes-toc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(20, 20, 20, 0.34);
+  /* Stops the page behind from scrolling with the sheet open, without a body lock
+     (which would swallow the smooth scroll a heading jump starts). */
+  touch-action: none;
+  animation: notes-toc-fade 0.15s ease;
+}
+.notes-root .notes-toc-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  background: var(--notes-bg);
+  border-top: 1px solid var(--notes-border);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 34px rgba(20, 20, 20, 0.16);
+  padding: 18px 20px calc(18px + env(safe-area-inset-bottom, 0px));
+  max-height: 76vh;
+  max-height: 76dvh;
+  animation: notes-toc-slide-up 0.2s ease;
+}
+.notes-root .notes-toc-sheet-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--notes-text-muted);
+  cursor: pointer;
+}
+/* Roomier tap targets than the pointer-driven sidebar version */
+.notes-root .notes-toc--sheet {
+  font-size: 14.5px;
+}
+.notes-root .notes-toc--sheet .notes-toc-link {
+  padding: 6px 0;
+}
+.notes-root .notes-toc--sheet .notes-toc-scroll {
+  max-height: 54vh;
+  max-height: 54dvh;
+}
+@keyframes notes-toc-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes notes-toc-slide-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 /* Anchor jumps land below the sticky header */
 .notes-root .notes-article :is(h1, h2, h3, h4) {
   scroll-margin-top: 88px;

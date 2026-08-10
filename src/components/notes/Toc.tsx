@@ -32,6 +32,10 @@ type TocNode = TocGroup | TocEntry;
 
 type Props = {
   selector?: string;
+  /** `sheet` drops the sidebar chrome so the list can live inside the mobile bottom sheet. */
+  variant?: 'sidebar' | 'sheet';
+  /** Fired after a heading jump, so the mobile sheet can dismiss itself. */
+  onNavigate?: () => void;
 };
 
 const levelFromTag = (tagName: string): number => {
@@ -144,7 +148,7 @@ function idsToOpenFor(nodes: TocNode[], activeId: string): string[] {
   return ids;
 }
 
-const Toc = ({ selector = '.notes-article' }: Props) => {
+const Toc = ({ selector = '.notes-article', variant = 'sidebar', onNavigate }: Props) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [activeId, setActiveId] = useState<string>('');
   const [progress, setProgress] = useState(0);
@@ -262,6 +266,7 @@ const Toc = ({ selector = '.notes-article' }: Props) => {
     setActiveId(id);
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.history.replaceState(null, '', `#${id}`);
+    onNavigate?.();
   };
 
   const linkClass = (id: string) =>
@@ -335,7 +340,10 @@ const Toc = ({ selector = '.notes-article' }: Props) => {
   if (headings.length < 2) return null;
 
   return (
-    <nav className='notes-toc' aria-label='On this page'>
+    <nav
+      className={variant === 'sheet' ? 'notes-toc notes-toc--sheet' : 'notes-toc'}
+      aria-label='On this page'
+    >
       <p className='notes-toc-heading'>On this page</p>
       <div
         className='notes-toc-progress'
@@ -414,7 +422,10 @@ const Toc = ({ selector = '.notes-article' }: Props) => {
       <button
         type='button'
         className='notes-toc-top'
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onClick={() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          onNavigate?.();
+        }}
       >
         ↑ Back to top
       </button>

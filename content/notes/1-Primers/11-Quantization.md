@@ -138,7 +138,7 @@ $$
 We measure how loud the signal is compared to that noise with the **signal-to-quantization-noise ratio** (SQNR), in decibels:
 
 $$  
-\text{SQNR}*{dB} = 10 \log*{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
+\text{SQNR}_{dB} = 10 \log_{10}\left(\frac{\sigma_{signal}^2}{\sigma_e^2}\right)  
 $$
 
 The one fact to remember: **each extra bit buys you about 6 dB.** Adding a bit doubles the number of grid points, which halves the step $S$, which quarters the noise variance, which is +6 dB. So going from 4-bit to 8-bit is roughly 24 dB cleaner. (You will see this written as $\approx 6.02b + 1.76$. Trust the "6 dB per bit" slope; the $1.76$ constant is an ADC-theory detail that assumes a specific signal shape and does not always apply to a pile of weights.)
@@ -291,7 +291,7 @@ $$
 To know how to compensate, it uses the layer's Hessian $H = 2XX^\top$, which measures how sensitive the output is to each weight and how the weights interact. This comes from an older pruning method (Optimal Brain Surgeon) adapted to quantization (Optimal Brain Quantization, OBQ). The per-weight update and the error it costs are:
 
 $$  
-\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]*{qq}}  [H^{-1}]*{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
+\delta = -\frac{w_q - \text{quant}(w_q)}{[H^{-1}]_{qq}}  [H^{-1}]_{:,q}, \qquad \varepsilon_q = \frac{\big(w_q - \text{quant}(w_q)\big)^2}{[H^{-1}]_{qq}}  
 $$
 
 You do not need to memorize that. The point is: $\delta$ is the correction spread across the remaining weights, and $\varepsilon_q$ is how much error this weight costs. OBQ is accurate but far too slow at billions of parameters, so GPTQ makes three practical simplifications:
@@ -387,7 +387,7 @@ Two things to read off. At $s=1$, that single channel is **97%** of the group's 
 You cannot grid search thousands of independent per-channel scales, so AWQ collapses it to a single exponent on the activation statistic:
 
 $$  
-\mathbf{s} = \mathbf{s}*X^{\alpha}, \qquad \alpha^* = \arg\min*{\alpha \in [0,1]} \Big Q\big(W\text{diag}(\mathbf{s})\big)\big(\text{diag}(\mathbf{s})^{-1}X\big) - WX \Big  
+\mathbf{s} = \mathbf{s}_X^{\alpha}, \qquad \alpha^* = \arg\min_{\alpha \in [0,1]} \Big\lVert Q\big(W\,\text{diag}(\mathbf{s})\big)\big(\text{diag}(\mathbf{s})^{-1}X\big) - WX \Big\rVert  
 $$
 
 $\alpha = 0$ means all scales are 1, which is plain round-to-nearest. $\alpha = 1$ scales exactly in proportion to activation magnitude, which is far too aggressive and blows up $S$. The answer is in between and differs per layer, so AWQ just grid searches 20 values. In the example above, $\alpha = \ln 4/\ln 60 = 0.34$ gets you $s \approx 4$.

@@ -1769,8 +1769,8 @@ print(len(buckets))   # query hashes to one bucket; only rank vectors sharing it
 Maximize the ELBO; the **reparameterization trick** ($z = \mu + \sigma\odot\epsilon$) makes sampling differentiable:
 
 $$  
-\mathcal{L} = \underbrace{\mathbb{E}*{q(z|x)}[\log p(x|z)]}*{\text{reconstruction}} - \underbrace{D_{KL}\big(q(z|x)p(z)\big)}*{\text{regularizer}}, \qquad*  
-*D*{KL} = -\tfrac{1}{2}\sum_j\big(1 + \log\sigma_j^2 - \mu_j^2 - \sigma_j^2\big)  
+\mathcal{L} = \underbrace{\mathbb{E}_{q(z|x)}[\log p(x|z)]}_{\text{reconstruction}} - \underbrace{D_{KL}\big(q(z|x)\;\Vert\;p(z)\big)}_{\text{regularizer}}, \qquad  
+D_{KL} = -\tfrac{1}{2}\sum_j\big(1 + \log\sigma_j^2 - \mu_j^2 - \sigma_j^2\big)  
 $$
 
 ```python
@@ -1795,7 +1795,7 @@ print(round(vae_loss(np.array([1.,0]), np.array([0.9,0.1]),
 ## Generative Adversarial Network (GAN)
 
 $$  
-\min_G\max_D  \mathbb{E}*{x}[\log D(x)] + \mathbb{E}*{z}[\log(1 - D(G(z)))]  
+\min_G\max_D  \mathbb{E}_{x}[\log D(x)] + \mathbb{E}_{z}[\log(1 - D(G(z)))]  
 $$
 
 ```python
