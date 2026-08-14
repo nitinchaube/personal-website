@@ -384,6 +384,26 @@
   opacity: 1;
 }
 
+/* Section dividers. A plain markdown `---` renders as one generic <hr>, but the DP
+   notes use it for two different jobs: separating whole patterns (before an h2) and
+   separating individual problems within a pattern (before an h3). Tell them apart by
+   what immediately follows, so patterns get a heavier, more spaced-out break. */
+.notes-root .prose hr {
+  border: none;
+  border-top: 1px solid var(--notes-border);
+  margin: 2.2em 0;
+}
+.notes-root .prose hr:has(+ h2) {
+  border-top-width: 3px;
+  border-color: var(--notes-text);
+  opacity: 0.16;
+  margin: 3.2em 0;
+}
+.notes-root .prose hr:has(+ h3) {
+  max-width: 90px;
+  margin: 2.6em 0 1.8em;
+}
+
 /* Compact image grid: consecutive captionless images (empty alt) render as
    bare <img> inside one paragraph and lay out as a tidy responsive grid. */
 .notes-root .prose p:has(> img) {
