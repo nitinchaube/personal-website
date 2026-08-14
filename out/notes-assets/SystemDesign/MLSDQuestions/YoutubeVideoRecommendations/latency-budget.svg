@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="310" viewBox="0 0 860 310" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .tick{font-size:10.5px;fill:#8a8a80}
+    .inbar{font-size:10.5px;fill:#fff;font-weight:600}
+    .leg{font-size:11.5px;fill:#333}
+    .legms{font-size:11.5px;fill:#6b6b6b}
+    .note{font-size:11.5px;fill:#444}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="309" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">Where the 200 ms actually goes</text>
+  <text class="sub" x="28" y="58">This is the budget I would write on the board first, because every modelling decision downstream is bounded by it.</text>
+
+  <!-- ticks -->
+  <g class="tick">
+    <text x="28" y="86" text-anchor="middle">0</text>
+    <text x="228" y="86" text-anchor="middle">50 ms</text>
+    <text x="428" y="86" text-anchor="middle">100 ms</text>
+    <text x="628" y="86" text-anchor="middle">150 ms</text>
+    <text x="828" y="86" text-anchor="middle">200 ms</text>
+  </g>
+  <g stroke="#dedcd4">
+    <line x1="28" y1="92" x2="28" y2="148"/>
+    <line x1="228" y1="92" x2="228" y2="148"/>
+    <line x1="428" y1="92" x2="428" y2="148"/>
+    <line x1="628" y1="92" x2="628" y2="148"/>
+    <line x1="828" y1="92" x2="828" y2="148"/>
+  </g>
+
+  <!-- stacked bar: 4 px per ms -->
+  <g>
+    <rect x="28"  y="100" width="40"  height="40" fill="#9aa0a6"/>
+    <rect x="68"  y="100" width="60"  height="40" fill="#1a73e8"/>
+    <rect x="128" y="100" width="80"  height="40" fill="#4285f4"/>
+    <rect x="208" y="100" width="20"  height="40" fill="#f9ab00"/>
+    <rect x="228" y="100" width="80"  height="40" fill="#a142f4"/>
+    <rect x="308" y="100" width="160" height="40" fill="#d93025"/>
+    <rect x="468" y="100" width="40"  height="40" fill="#1e8e3e"/>
+    <rect x="508" y="100" width="40"  height="40" fill="#5f6368"/>
+    <rect x="548" y="100" width="280" height="40" fill="#e4e2da"/>
+    <rect x="28" y="100" width="800" height="40" fill="none" stroke="#cfcdc5"/>
+  </g>
+  <text class="inbar" x="168" y="124" text-anchor="middle">ANN</text>
+  <text class="inbar" x="268" y="124" text-anchor="middle">features</text>
+  <text class="inbar" x="388" y="124" text-anchor="middle">RANKING</text>
+  <text x="688" y="124" text-anchor="middle" font-size="10.5px" fill="#6b6b6b" font-weight="600">headroom for the p99 tail</text>
+
+  <!-- legend -->
+  <g>
+    <circle cx="34" cy="176" r="5" fill="#9aa0a6"/><text class="leg" x="46" y="180">routing + auth</text><text class="legms mono" x="240" y="180" text-anchor="end">10 ms</text>
+    <circle cx="34" cy="200" r="5" fill="#1a73e8"/><text class="leg" x="46" y="204">user + context features</text><text class="legms mono" x="240" y="204" text-anchor="end">15 ms</text>
+    <circle cx="34" cy="224" r="5" fill="#4285f4"/><text class="leg" x="46" y="228">retrieval: ANN lookup</text><text class="legms mono" x="240" y="228" text-anchor="end">20 ms</text>
+
+    <circle cx="304" cy="176" r="5" fill="#f9ab00"/><text class="leg" x="316" y="180">filters: watched, policy, dedup</text><text class="legms mono" x="546" y="180" text-anchor="end">5 ms</text>
+    <circle cx="304" cy="200" r="5" fill="#a142f4"/><text class="leg" x="316" y="204">per-candidate feature fetch</text><text class="legms mono" x="546" y="204" text-anchor="end">20 ms</text>
+    <circle cx="304" cy="224" r="5" fill="#d93025"/><text class="leg" x="316" y="228">ranking: one MMoE forward pass</text><text class="legms mono" x="546" y="228" text-anchor="end">40 ms</text>
+
+    <circle cx="610" cy="176" r="5" fill="#1e8e3e"/><text class="leg" x="622" y="180">re-rank: DPP + rules</text><text class="legms mono" x="832" y="180" text-anchor="end">10 ms</text>
+    <circle cx="610" cy="200" r="5" fill="#5f6368"/><text class="leg" x="622" y="204">response assembly</text><text class="legms mono" x="832" y="204" text-anchor="end">10 ms</text>
+    <circle cx="610" cy="224" r="5" fill="#e4e2da" stroke="#cfcdc5"/><text class="leg" x="622" y="228">headroom, retries, GC</text><text class="legms mono" x="832" y="228" text-anchor="end">70 ms</text>
+  </g>
+
+  <line x1="28" y1="252" x2="832" y2="252" stroke="#ecebe4"/>
+  <text class="note" x="28" y="276">The line that matters: ranking gets ~40 ms. At roughly 50 µs of accelerator time per candidate, that is ~800 candidates —</text>
+  <text class="note" x="28" y="294">so “how many candidates may retrieval return?” is not a modelling taste question, it is arithmetic.</text>
+</svg>

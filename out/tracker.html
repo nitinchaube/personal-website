@@ -1,0 +1,1824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLE & FDE Interview Prep Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --orange: #f0883e;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+    --coding: #58a6ff;
+    --srs: #bc8cff;
+    --portfolio: #f0883e;
+    --sysdesign: #3fb950;
+    --behavioral: #f778ba;
+    --retro: #39d2c0;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .app { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 40px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+  .header p { color: var(--text-muted); font-size: .95rem; }
+
+  /* Overall Progress */
+  .overall-progress {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow);
+  }
+  .overall-progress h2 { font-size: 1.1rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-card .number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .stat-card .label { font-size: .8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+  .progress-bar-container {
+    background: var(--surface2);
+    border-radius: 20px;
+    height: 28px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 20px;
+    background: linear-gradient(90deg, var(--accent), var(--purple));
+    transition: width .5s ease;
+    position: relative;
+  }
+  .progress-bar-text {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: .8rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.5);
+  }
+
+  /* Phase Tabs */
+  .phase-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .phase-tab {
+    padding: 10px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .9rem;
+    color: var(--text-muted);
+    transition: all .2s;
+    font-weight: 500;
+    user-select: none;
+  }
+  .phase-tab:hover { border-color: var(--accent); color: var(--text); }
+  .phase-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .phase-tab .tab-progress {
+    font-size: .75rem;
+    opacity: .8;
+    margin-left: 6px;
+  }
+
+  /* Day Card */
+  .day-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .day-card:hover { border-color: #484f58; }
+  .day-card.completed { border-left: 4px solid var(--green); }
+  .day-card.today { border-left: 4px solid var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+  .today-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .5px;
+    vertical-align: middle;
+    background: var(--accent);
+    color: #fff;
+  }
+  .rest-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .5px;
+    vertical-align: middle;
+    background: rgba(63,185,80,.15);
+    color: var(--green);
+  }
+  .day-card.rest { opacity: .72; border-left: 4px solid var(--green); }
+  .day-card.rest .day-number { background: rgba(63,185,80,.12); color: var(--green); }
+  .day-card.rest.today { opacity: 1; }
+
+  .day-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s;
+  }
+  .day-header:hover { background: rgba(255,255,255,.02); }
+  .day-header-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+  .day-number {
+    background: var(--surface2);
+    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .day-card.completed .day-number { background: var(--green); color: #fff; }
+  .day-title-area { min-width: 0; }
+  .day-title { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .day-subtitle { font-size: .8rem; color: var(--text-muted); }
+  .day-header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .day-progress-mini {
+    width: 100px;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .day-progress-mini-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+  .day-progress-label { font-size: .8rem; color: var(--text-muted); min-width: 42px; text-align: right; }
+  .chevron {
+    transition: transform .2s;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+  }
+  .day-card.open .chevron { transform: rotate(180deg); }
+
+  .day-body { display: none; border-top: 1px solid var(--border); }
+  .day-card.open .day-body { display: block; }
+
+  /* Category Section */
+  .category {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .category:last-child { border-bottom: none; }
+  .category-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .category-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .category-name { font-weight: 600; font-size: .9rem; }
+  .category-time { font-size: .78rem; color: var(--text-muted); margin-left: auto; }
+  .category-progress-text { font-size: .78rem; color: var(--text-muted); }
+
+  /* Task Item */
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0 7px 20px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background .1s;
+  }
+  .task:hover { background: rgba(255,255,255,.02); }
+  .task input[type="checkbox"] { display: none; }
+  .task .checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 5px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s;
+    margin-top: 1px;
+    cursor: pointer;
+  }
+  .task .checkmark svg { opacity: 0; transition: opacity .15s; width: 12px; height: 12px; }
+  .task.checked .checkmark {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .task.checked .checkmark svg { opacity: 1; }
+  .task.checked .task-text { color: var(--text-muted); text-decoration: line-through; text-decoration-color: rgba(139,148,158,.4); }
+  .task-text { font-size: .88rem; line-height: 1.5; }
+  .task-text code {
+    background: var(--surface2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: .82rem;
+  }
+  .subtask { padding-left: 30px; }
+  .subtask .checkmark { width: 17px; height: 17px; border-radius: 4px; }
+  .subtask .task-text { font-size: .84rem; }
+
+  .tag {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .3px;
+    vertical-align: middle;
+  }
+  .tag-google { background: rgba(88,166,255,.15); color: var(--accent); }
+  .tag-classic { background: rgba(240,136,62,.15); color: var(--orange); }
+  .tag-hard { background: rgba(248,81,73,.15); color: var(--red); }
+  .tag-easy { background: rgba(63,185,80,.15); color: var(--green); }
+  .tag-medium { background: rgba(210,153,34,.15); color: var(--yellow); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--text-muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: .9rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .toolbar input[type="text"]:focus { border-color: var(--accent); }
+  .toolbar input[type="text"]::placeholder { color: var(--text-muted); }
+
+  .btn {
+    padding: 10px 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    font-weight: 500;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface2); border-color: #484f58; }
+  .btn-danger { border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: rgba(248,81,73,.1); }
+  .btn-success { border-color: var(--green); color: var(--green); }
+  .btn-success:hover { background: rgba(63,185,80,.1); }
+
+  /* Retro section */
+  .retro-section { padding: 16px 20px; background: var(--surface2); }
+  .retro-section h4 { font-size: .85rem; color: var(--cyan); margin-bottom: 10px; }
+  .retro-textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: .85rem;
+    resize: vertical;
+    min-height: 60px;
+    outline: none;
+    margin-bottom: 8px;
+  }
+  .retro-textarea:focus { border-color: var(--accent); }
+  .retro-textarea::placeholder { color: var(--text-muted); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--green);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: .9rem;
+    font-weight: 500;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .3s;
+    z-index: 100;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* File warning banner */
+  .file-warning {
+    background: linear-gradient(135deg, rgba(210,153,34,.15), rgba(248,81,73,.1));
+    border: 1px solid var(--yellow);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: .88rem;
+  }
+  .file-warning code {
+    background: var(--surface2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: .82rem;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: border-color .2s;
+  }
+  .file-warning code:hover { border-color: var(--accent); }
+  .file-warning .warn-icon { font-size: 1.3rem; }
+  .file-warning .dismiss-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
+
+  /* Streak banner */
+  .streak-banner {
+    background: linear-gradient(135deg, rgba(88,166,255,.1), rgba(188,140,255,.1));
+    border: 1px solid rgba(88,166,255,.2);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .streak-left { display: flex; align-items: center; gap: 12px; }
+  .streak-fire { font-size: 2rem; }
+  .streak-text { font-weight: 600; font-size: 1.1rem; }
+  .streak-sub { font-size: .8rem; color: var(--text-muted); }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .app { padding: 12px 10px 60px; }
+    .header h1 { font-size: 1.4rem; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .day-progress-mini { display: none; }
+    .phase-tab { padding: 8px 14px; font-size: .82rem; }
+  }
+
+  /* Print */
+  @media print {
+    body { background: #fff; color: #000; }
+    .toolbar, .phase-tabs, .btn, .toast, .streak-banner { display: none !important; }
+    .day-body { display: block !important; }
+    .day-card, .overall-progress, .category { border-color: #ccc; background: #fff; }
+    .task.checked .task-text { text-decoration: line-through; }
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="header">
+    <h1>MLE &amp; FDE Prep — Google · Meta · Amazon</h1>
+    <p>45 focused days (Sundays off) &middot; 3 shipped projects (recsys+serving · LLM gateway+RAG · research paper) + FDE build sprints · interleaved ML fundamentals &amp; SQL · job-search from week 1 · full-loop mocks &middot; Jul 20 &rarr; Sep 9 &middot; <a href="PREP_PLAN.md" style="color:var(--accent)">read the method</a></p>
+  </div>
+
+  <div class="file-warning" id="fileWarning" style="display:none">
+    <span class="warn-icon">&#9888;&#65039;</span>
+    <span>You're running from a local file. For <strong>reliable auto-save</strong>, run this in your terminal, then open <a href="http://localhost:3000/tracker.html" style="color:var(--accent)">localhost:3000</a>:</span>
+    <code id="serverCmd" title="Click to copy">python3 -m http.server 3000</code>
+    <span style="font-size:.78rem;color:var(--text-muted)">(click to copy)</span>
+    <button class="dismiss-btn" id="dismissWarning" title="Dismiss">&times;</button>
+  </div>
+
+  <div class="streak-banner" id="streakBanner">
+    <div class="streak-left">
+      <div class="streak-fire">&#128293;</div>
+      <div>
+        <div class="streak-text" id="streakText">Day 0</div>
+        <div class="streak-sub" id="streakSub">Start checking off tasks to build your streak</div>
+      </div>
+    </div>
+    <div style="font-size:.85rem;color:var(--text-muted)" id="streakDate"></div>
+  </div>
+
+  <div class="overall-progress" id="overallProgress">
+    <h2>&#128200; Overall Progress</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="number" style="color:var(--green)" id="statCompleted">0</div>
+        <div class="label">Tasks Done</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="color:var(--accent)" id="statTotal">0</div>
+        <div class="label">Total Tasks</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="color:var(--yellow)" id="statDaysCompleted">0</div>
+        <div class="label">Days Completed</div>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="color:var(--purple)" id="statProblems">0</div>
+        <div class="label">LC Problems Done</div>
+      </div>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-bar-fill" id="overallBar" style="width:0%">
+        <span class="progress-bar-text" id="overallBarText">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--srs)"></div> Revision &amp; Spaced Recall</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--coding)"></div> DSA Maintenance / Mocks (timed)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--sysdesign)"></div> Inference Eng &amp; ML/AI Concepts</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--portfolio)"></div> Project Build (recsys · gateway)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> ML System Design Rep</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> ML Fundamentals + SQL</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div> Research + Paper (P3) · FDE Sprint</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--behavioral)"></div> Job Search / Behavioral / LPs</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--retro)"></div> Log / Checkpoint</div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="Search tasks, problems, or topics...">
+    <button class="btn" id="expandAllBtn">Expand All</button>
+    <button class="btn" id="collapseAllBtn">Collapse All</button>
+    <button class="btn btn-success" id="exportBtn">Export</button>
+    <button class="btn" id="importBtn">Import</button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+    <button class="btn btn-danger" id="resetBtn">Reset All</button>
+  </div>
+
+  <div class="phase-tabs" id="phaseTabs"></div>
+
+  <div id="daysContainer"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = buildPlanData();
+
+const STORAGE_KEY = 'google_prep_v6';
+// ---- date helpers (ISO-based so rest days work) ----
+function isoToday() {
+  const d = new Date(); d.setHours(0,0,0,0);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function allDays() { const out=[]; DATA.forEach(p=>p.days.forEach(d=>out.push(d))); return out; }
+function todayCard() { const iso=isoToday(); return allDays().find(d=>d.iso===iso) || null; }
+function planBounds() { const a=allDays().map(d=>d.iso).sort(); return {first:a[0], last:a[a.length-1]}; }
+const DB_NAME = 'GooglePrepTracker';
+const DB_STORE = 'state';
+let state = { checked: {}, notes: {} };
+let db = null;
+let saveTimer = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => { e.target.result.createObjectStore(DB_STORE); };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = () => resolve(null);
+  });
+}
+
+function idbGet(key) {
+  return new Promise((resolve) => {
+    if (!db) { resolve(null); return; }
+    try {
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+
+function idbSet(key, val) {
+  return new Promise((resolve) => {
+    if (!db) { resolve(); return; }
+    try {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(val, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch { resolve(); }
+  });
+}
+
+async function loadState() {
+  let loaded = null;
+  try { await openDB(); } catch {}
+  if (db) {
+    try { loaded = await idbGet(STORAGE_KEY); } catch {}
+  }
+  if (!loaded) {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (s) loaded = JSON.parse(s);
+    } catch {}
+  }
+  return loaded && loaded.checked ? loaded : { checked: {}, notes: {} };
+}
+
+function saveState() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(_doSave, 150);
+}
+
+function _doSave() {
+  const json = JSON.stringify(state);
+  try { localStorage.setItem(STORAGE_KEY, json); } catch {}
+  idbSet(STORAGE_KEY, state);
+}
+
+function buildPlanData() {
+  // ---- tags & task builders ----
+  const G='<span class="tag tag-google">GOOGLE</span>';
+  const E='<span class="tag tag-easy">EASY</span>';
+  const M='<span class="tag tag-medium">MED</span>';
+  const H='<span class="tag tag-hard">HARD</span>';
+  const C='<span class="tag tag-classic">CLASSIC</span>';
+  const t = s => ({t:s, sub:false});
+  const p = s => ({t:s, sub:false, lc:true});
+  const r = s => ({t:s, sub:false, retro:true});
+
+  // ---- category builders ----
+  const cRev   = tasks => ({name:'DSA Revision — Cold Re-solve', color:'srs', time:'30 min', tasks});
+  const cDSA   = tasks => ({name:'DSA — Maintenance (timed)', color:'coding', time:'45–60 min', tasks});
+  const cInf   = tasks => ({name:'Inference Engineering — Study', color:'sysdesign', time:'75 min', tasks});
+  const cBuild = tasks => ({name:'Recsys / Serving — Build', color:'portfolio', time:'90 min', tasks});
+  const cMLSD  = tasks => ({name:'ML System Design — Rep', color:'yellow', time:'45 min', tasks});
+  const cBeh   = tasks => ({name:'Behavioral / Googleyness', color:'behavioral', time:'20 min', tasks});
+  const cSR    = tasks => ({name:'🔁 Spaced Revision — Don’t Forget', color:'srs', time:'10–15 min', tasks});
+  const cFund  = tasks => ({name:'🧩 ML Fundamentals + SQL', color:'red', time:'45 min', tasks});
+  const cFDE   = tasks => ({name:'🚀 FDE Build Sprint', color:'cyan', time:'90–120 min', tasks});
+  const cJob   = tasks => ({name:'💼 Job Search + Behavioral', color:'behavioral', time:'20–30 min', tasks});
+  const cGW    = tasks => ({name:'🌐 Project 2 — LLM Gateway + RAG', color:'portfolio', time:'2 hr', tasks});
+  const cRes   = tasks => ({name:'🔬 Project 3 — Research + Paper', color:'cyan', time:'2 hr', tasks});
+  const cLog   = (extra=[]) => ({name:'Log & Review Queue', color:'retro', time:'10 min', tasks:[
+    r('Mark each problem ✅ clean / ⚠️ struggled / ❌ needed solution'),
+    r('Every ⚠️/❌ → into tomorrow’s cold re-solve'),
+    r('One inference-eng concept I locked in today: ___'),
+    ...extra
+  ]});
+  const ck = tasks => ({name:'Block Checkpoint', color:'retro', time:'15 min', tasks});
+  const newIntro = t('▶ Cold start, 25-min timer each. Open the solution ONLY after the timer, then re-code clean into <code>ConceptProblem.ipynb</code>.');
+
+  const day  = (n, iso, date, title, subtitle, cats) => ({day:n, iso, date, title, subtitle:date+' · '+subtitle, categories:cats});
+  const rest = (n, iso, date) => ({day:n, iso, date, rest:true, badge:'∅', title:'Rest Day — Recover', subtitle:date+' · No grind. Protect the streak by protecting recovery.', categories:[
+    {name:'Recovery (light, optional)', color:'green', time:'all day', tasks:[
+      t('NO new problems, NO timed work. Let the week consolidate.'),
+      t('Optional ≤30 min: skim one pattern template or re-read one AI/ML note for fun'),
+      t('Exercise, sunlight, real food, 8 hr sleep'),
+      r('One win from this week I am proud of: ___'),
+    ]},
+  ]});
+
+  const phases = [
+    { id:'phase1', name:'Block 1: Inference Fundamentals + Quantization ‖ Two-Tower + ANN', days:[] },
+    { id:'phase2', name:'Block 2: Attention · Batching · Spec-Decode ‖ DCN-v2 + FastAPI', days:[] },
+    { id:'phase3', name:'Block 3: Serving Benchmarks + vLLM Hands-On', days:[] },
+    { id:'phase4', name:'Block 4: Serving Optimization · Deploy · Economics', days:[] },
+    { id:'phase5', name:'Block 5: Mocks · Portfolio · Coding Gate', days:[] },
+    { id:'phase6', name:'Block 6: Project 2 — LLM Inference Gateway + RAG', days:[] },
+    { id:'phase7', name:'Block 7: Project 3 — Research + Paper', days:[] },
+    { id:'phase8', name:'Block 8: FDE Rapid-Build Sprints', days:[] },
+    { id:'phase9', name:'Block 9: Design · LPs · Full-Loop Mocks · Wrap', days:[] },
+  ];
+
+  // ================= BLOCK 1 : D1-D6 (+ rest Jul19) — Inference Fundamentals ‖ Two-Tower + ANN =================
+  // Parallel threads start NOW and run all 6 weeks: 🧩 ML Fundamentals + SQL (interleaved so the
+  // Block-5 mocks can actually test breadth) and 💼 Job Search + Behavioral (referrals/resume/STAR bank
+  // begin Day 1 — FANG pipelines take 4-8 weeks, so applying can't wait until the end).
+  phases[0].days = [
+    day(1,'2026-07-20','Mon Jul 20','Prefill vs Decode + KV Cache  +  Project Setup + Two-Tower Data','Why the two phases differ; stand up the repo; time-based split',[
+      cInf([
+        t('📘 <b>LLM Inference Handbook, Ch.1–5</b> (bentoml.com/llm): <b>prefill vs decode</b> — understand <i>why</i> they exist, not just what'),
+        t('<b>KV cache</b>: what it stores, why it grows linearly with sequence length, why it becomes the memory bottleneck'),
+        t('Metrics cold: <b>TTFT, ITL, E2E latency, throughput, goodput</b> (the SLO-aware one most miss) + the latency↔throughput tradeoff'),
+      ]),
+      cBuild([
+        t('🛠 Create the <b>recsys repo</b> (README stub, env, W&amp;B/TensorBoard) and 📥 download <b>MovieLens-25M</b>; note GPU budget (~$30–50 total)'),
+        t('🛠 Build a <b>time-based</b> train/val/test split (NOT random — interviewers check this)'),
+        t('Sketch the two-tower design: user tower (id→MLP 128→64), item tower (id+genres→MLP→64), in-batch softmax'),
+      ]),
+      cDSA([ p('<b>Merge Intervals</b> (LC 56) '+G), p('<b>Coin Change</b> (LC 322) '+G) ]),
+      cJob([
+        t('🎯 Build your <b>target list</b>: 10–15 specific roles (Google/Meta/Amazon MLE + 3–4 FDE-style: Palantir/OpenAI/Anthropic). Start a simple applications tracker (company · role · referral · status)'),
+        t('List every <b>warm referral contact</b> at a target company (LinkedIn 1st/2nd degree, alumni, ex-colleagues) — this list drives everything'),
+      ]),
+      cSR([
+        t('🔁 DSA warm recall: re-solve <b>Group Anagrams</b> (LC 49) cold — hashing template'),
+        t('🔁 Legacy concept: recite the <b>7-step ML framework</b> + name 2 offline + 2 online metrics'),
+      ]),
+      cLog([ r('Baseline: can I explain prefill vs decode with no notes? (Y/N): ___') ]),
+    ]),
+    day(2,'2026-07-21','Tue Jul 21','GPU Memory Math + Roofline  +  Two-Tower: Implement','VRAM on a napkin; decode is memory-bound',[
+      cInf([
+        t('Internalize the VRAM formula: <code>mem = params×bytes + KV_cache + 2–4GB overhead</code>. Practice: Llama-3-70B FP16 = 140GB, INT4 = 35GB'),
+        t('<b>Roofline for inference</b>: why decode is <b>memory-bandwidth-bound</b> and prefill is <b>compute-bound</b> — the insight behind quantization wins'),
+      ]),
+      cBuild([
+        t('🛠 Implement the <b>Two-Tower model</b> in PyTorch with <b>in-batch softmax cross-entropy</b> (the YouTube/Google loss)'),
+        t('Wire the training loop; log loss to W&amp;B/TensorBoard'),
+      ]),
+      cDSA([ p('<b>Maximal Square</b> (LC 221) '+M), p('<b>Longest Common Subsequence</b> (LC 1143) '+M) ]),
+      cFund([
+        t('<b>Bias-variance tradeoff</b>; regularization (L1/L2/dropout/early stopping) — <i>why</i> each reduces variance (the classic "ML breadth" opener)'),
+      ]),
+      cBeh([ t('Practice "Why Google?" + "Tell me about yourself" out loud, under 2 min each') ]),
+      cSR([
+        t('🔁 Recall yesterday: <b>prefill vs decode</b> + why the KV cache is the memory bottleneck (no notes)'),
+        t('🔁 DSA: re-solve <b>Product of Array Except Self</b> (LC 238) cold — prefix/suffix'),
+      ]),
+      cLog([ r('VRAM napkin estimate I did today (model+quant → GB): ___') ]),
+    ]),
+    day(3,'2026-07-22','Wed Jul 22','Train the Retriever  +  Serving Landscape','Train two-tower to convergence; loss curves',[
+      cBuild([
+        t('🛠 Train the two-tower on MovieLens-25M to convergence; capture the <b>loss curves</b>'),
+        t('Extract all <b>item embeddings</b>; sanity-check nearest neighbors for a few known movies'),
+      ]),
+      cInf([ t('📘 Skim Handbook Ch.6 intro — the serving-framework map (vLLM / TGI / SGLang), just the mental model') ]),
+      cDSA([ p('<b>Word Break</b> (LC 139) '+M), p('<b>House Robber</b> (LC 198) — re-time '+M) ]),
+      cJob([
+        t('📄 Draft <b>resume v1 (MLE-focused)</b>: put the recsys metrics + inference-eng work you\'re building front and center (leave placeholders for the numbers you\'ll fill in)'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: the <b>VRAM formula</b> + why decode is memory-bandwidth-bound (roofline)'),
+        t('🔁 Legacy concept: <b>feature store</b> (online vs offline) + <b>train/serve skew</b> in 60s'),
+      ]),
+      cLog(),
+    ]),
+    day(4,'2026-07-23','Thu Jul 23','FP Formats + Quantization Theory  +  FAISS Index','BF16/FP16/FP8/INT8/INT4; build the ANN index',[
+      cInf([
+        t('📘 Handbook Ch.6 (Quantization). Know cold: FP32 (ref only), <b>BF16</b> (default, wide exponent), FP16 (more precision, narrow range), FP8 (Hopper ~2×), INT8 (&lt;1% loss), INT4 (1–3% loss, 4× mem)'),
+        t('Why <b>BF16 is preferred over FP16 for training</b>: wider exponent range → more numerically stable'),
+      ]),
+      cBuild([
+        t('🛠 Build a <b>FAISS</b> index over item embeddings — start with <code>IndexFlatIP</code> (exact search)'),
+        t('For each test user: user emb → query FAISS → top-K items'),
+      ]),
+      cDSA([ p('<b>Number of Connected Components</b> (LC 323) '+M), p('<b>Pacific Atlantic Water Flow</b> (LC 417) — re-time '+G) ]),
+      cFund([
+        t('Loss functions cold: <b>cross-entropy vs MSE vs hinge</b> — when to use each'),
+        t('Optimizers: SGD vs momentum vs <b>Adam/AdamW</b>; LR schedules (cosine, warmup) — be ready for "why Adam over SGD?"'),
+      ]),
+      cSR([
+        t('🔁 Recall D1–D2: TTFT/ITL/goodput + GPU memory math on a napkin'),
+        t('🔁 DSA: re-solve <b>LRU Cache</b> (LC 146) cold — hashmap + doubly-linked list'),
+      ]),
+      cLog(),
+    ]),
+    day(5,'2026-07-24','Fri Jul 24','AWQ + Quant Benchmarks  +  Retrieval Eval','Salient channels; Recall@K vs popularity (resume #1)',[
+      cInf([
+        t('📄 <b>AWQ</b> (arxiv 2306.00978) §3 only: not all weights are equal — protect salient channels. Articulate the idea in 2 sentences.'),
+        t('📊 <b>JarvisLabs vLLM quant guide</b>: AWQ / GPTQ / Marlin / GGUF benchmarks; takeaway = <b>Marlin-AWQ</b> is the quality/speed sweet spot'),
+      ]),
+      cBuild([
+        t('🛠 Compute <b>Recall@50</b> and <b>Recall@100</b> vs a <b>popularity baseline</b> (top-K most popular for everyone)'),
+        t('🧊 Report it <b>per cold-start slice</b> (strict-cold / sparse / warm — guide Phase A #2). The ID-only model craters on strict-cold — that\'s the "before" picture Day 8 fixes'),
+        t('📌 First resume number: “Recall@100 of X vs Y popularity baseline.” Write it into the README.'),
+      ]),
+      cDSA([ p('<b>Min Cost to Connect Points</b> (LC 1584) — MST '+M) ]),
+      cBeh([ t('Draft/refresh 1 STAR tied to an ML or infra tradeoff you can tell in 90s') ]),
+      cJob([
+        t('📄 Draft <b>resume v2 (FDE-focused)</b>: same experience, reframed around shipping speed, ambiguity tolerance, full-stack ownership, and customer impact'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: <b>FP formats</b> — BF16 vs FP16 vs FP8/INT8/INT4 and when to use each'),
+        t('🔁 Legacy concept: embeddings + <b>ANN/HNSW</b> recall-vs-latency-vs-memory tradeoff'),
+      ]),
+      cLog([ r('Recall@100 achieved vs popularity baseline: ___ vs ___') ]),
+    ]),
+    day(6,'2026-07-25','Sat Jul 25','Quant Quality/Speed Tradeoff  +  ANN: IVFPQ  +  Checkpoint','Which methods keep quality vs max throughput; PQ index',[
+      cInf([
+        t('Nail the <b>quality↔speed tradeoff</b>: which methods preserve quality (AWQ/GPTQ) vs maximize throughput (Marlin kernels, FP8)'),
+        t('Make a one-card cheat sheet: FP-formats table + AWQ insight + “when to use which”'),
+      ]),
+      cBuild([
+        t('🛠 Switch FAISS to <code>IndexIVFPQ</code> (product quantization). First look at memory vs <code>IndexFlatIP</code>; you’ll measure it rigorously in Block 4.'),
+      ]),
+      cMLSD([ t('Whiteboard rep #1 (45-min, out loud): <b>YouTube/TikTok feed ranking</b> — candidate generation → ranking → re-rank; hit the full loop') ]),
+      cFund([
+        t('Trees &amp; boosting cold: decision tree → random forest → <b>gradient boosting</b> (fit the residuals) → XGBoost/LightGBM intuition'),
+        t('SVM margin intuition; k-means; PCA — one-line "what problem does each solve"'),
+      ]),
+      cJob([
+        t('✍️ Build the <b>STAR bank #1–2</b>: write 2 stories (Ownership / measurable Impact) in tight STAR form, each tellable in under 2 min'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: <b>AWQ</b> salient-channel insight in 2 sentences + why Marlin-AWQ is the sweet spot'),
+        t('🔁 Weekly sweep: re-solve your lowest-rated DSA pattern from this week, cold'),
+      ]),
+      ck([
+        r('Week-1 recall chain (say aloud): prefill/decode → KV cache → FP formats → AWQ → IVFPQ'),
+        r('Rate 1–5: inference fundamentals, quantization; two-tower + FAISS working? (Y/N)'),
+        r('Pipeline check: target list done? both resumes drafted? STAR stories so far: ___/10'),
+      ]),
+    ]),
+    rest(201,'2026-07-26','Sun Jul 26'),
+  ];
+
+  // ================= BLOCK 2 : D7-D12 (+ rest Aug2) — Attention · Batching ‖ DCN-v2 + FastAPI =================
+  phases[1].days = [
+    day(7,'2026-07-27','Mon Jul 27','PagedAttention  +  DCN-v2 Ranker','KV cache as virtual memory; cross network',[
+      cInf([
+        t('📄 <b>PagedAttention</b> (arxiv 2309.06180): KV cache as virtual memory — non-contiguous blocks, no fragmentation, sharing across requests. This makes continuous batching practical.'),
+        t('Be able to <b>whiteboard the block-table mechanism</b>'),
+      ]),
+      cBuild([
+        t('🛠 Build <b>DCN-v2</b> (Deep &amp; Cross Network v2): input = user + item features + the two-tower retrieval score'),
+        t('Cross network = explicit feature interactions; deep network = implicit patterns'),
+      ]),
+      cDSA([ p('<b>Course Schedule</b> (LC 207) — re-time '+M), p('<b>Coin Change II</b> (LC 518) '+M) ]),
+      cJob([
+        t('📧 <b>Referral outreach batch #1</b>: message 3–5 warm contacts — short, specific ask (role link + 2-line why-you). Log each in your tracker'),
+      ]),
+      cSR([
+        t('🔁 Week-1 chain recall (out loud): prefill/decode → KV cache → FP formats → AWQ → IVFPQ'),
+        t('🔁 Legacy concept: <b>two-tower retrieval</b> + in-batch softmax; 2 cold-start mitigations'),
+      ]),
+      cLog(),
+    ]),
+    day(8,'2026-07-28','Tue Jul 28','FlashAttention  +  DCN-v2 Multi-Objective','IO-aware tiling; P(click)+P(rating)',[
+      cInf([
+        t('📄 <b>FlashAttention-2</b> (arxiv 2307.08691) §2: restructure attention to minimize HBM reads/writes via tiling + recomputation. It’s an <b>IO optimization, not algorithmic</b>.'),
+        t('Explain why FlashAttention is faster <i>despite doing more FLOPs</i>'),
+        t('Skim <b>FlashInfer</b> (MLSys 2025) — how it handles variable-length KV caches'),
+      ]),
+      cBuild([
+        t('🧊 <b>THE HEADLINE (guide Phase F)</b>: encode item text with <code>bge-small</code>, fuse into the item tower (concat v1, popularity-gated v2); content-only path for zero-interaction items + <b>incremental FAISS add</b> (<code>POST /items</code> → recommendable in seconds)'),
+        t('📌 Measure the lift: strict-cold Recall@100, ID-only vs +content — <b>“+X% cold-start Recall”</b> is your most unique resume number'),
+        t('🛠 Multi-objective ranker heads: <b>P(click)</b> + <b>P(rating≥4)</b>; loss = weighted BCE(click) + MSE(rating); add the <b>content-similarity feature</b> to the ranker'),
+      ]),
+      cDSA([ p('<b>Target Sum</b> (LC 494) '+M) ]),
+      cFund([
+        t('<b>Backprop</b> from scratch: derive the chain rule through a 2-layer MLP <i>by hand, on paper</i> — the single most-tested DL fundamental'),
+      ]),
+      cBeh([ t('Record 1 STAR aloud; listen back for filler words') ]),
+      cSR([
+        t('🔁 Recall yesterday: <b>PagedAttention</b> block-table mechanism (whiteboard from memory)'),
+        t('🔁 DSA: re-solve <b>Number of Islands</b> (LC 200) cold — BFS/DFS flood fill'),
+      ]),
+      cLog(),
+    ]),
+    day(9,'2026-07-29','Wed Jul 29','Continuous Batching  +  Ranking Eval','Static→dynamic→continuous; NDCG@10 (resume #2)',[
+      cInf([
+        t('📘 Handbook batching sections: static → dynamic → <b>continuous batching</b>; why continuous gives 2–3× throughput over static'),
+      ]),
+      cBuild([
+        t('🛠 Evaluate the ranker with <b>NDCG@10</b> and <b>AUC</b> vs a simple MLP baseline'),
+        t('📌 Second resume number: “NDCG@10 of Y, +Z% over baseline.”'),
+      ]),
+      cDSA([ p('<b>Partition Equal Subset Sum</b> (LC 416) — re-time '+M), p('<b>Longest Increasing Subsequence</b> (LC 300) '+M) ]),
+      cFund([
+        t('📊 <b>SQL</b>: 2 problems — <b>JOINs + GROUP BY + HAVING</b> (LeetCode SQL / StrataScratch medium). SQL is a near-universal Amazon/Meta MLE round'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: why <b>FlashAttention</b> is faster despite more FLOPs (IO-aware tiling)'),
+        t('🔁 Legacy concept: ranking — LTR, <b>position bias</b>, calibration, multi-task'),
+      ]),
+      cLog([ r('NDCG@10 vs MLP baseline: ___ vs ___') ]),
+    ]),
+    day(10,'2026-07-30','Thu Jul 30','Speculative Decoding  +  Two-Stage Wiring','Draft-then-verify; end-to-end path in code',[
+      cInf([
+        t('📄 <b>Speculative decoding</b>: a small draft model proposes N tokens, the large model verifies in one pass. Know <b>when it helps</b> (latency-sensitive, low batch) vs <b>hurts</b> (high-throughput, GPU already saturated)'),
+      ]),
+      cBuild([
+        t('🛠 Wire the two-stage path in code: user_id → user emb → FAISS top-100 → feature lookup → ranker → top-10'),
+      ]),
+      cDSA([ p('<b>Best Time to Buy/Sell with Cooldown</b> (LC 309) '+M), p('<b>Redundant Connection</b> (LC 684) — re-time '+M) ]),
+      cJob([
+        t('📞 <b>Recruiter-screen prep</b>: write your 90-second pitch (who you are + what you build + what you want), your comp expectations, and 3 questions to ask a recruiter'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: static→dynamic→<b>continuous batching</b> + the 2–3× throughput reason'),
+        t('🔁 DSA: re-solve <b>Course Schedule II</b> (LC 210) cold — topological sort (Kahn)'),
+      ]),
+      cLog(),
+    ]),
+    day(11,'2026-07-31','Fri Jul 31','Disaggregation  +  Coding Mock + CTR Rep','Sarathi-Serve; 2-medium mock',[
+      cInf([
+        t('📄 <b>Prefill-decode disaggregation</b> (Sarathi-Serve, OSDI 2024): prefill compute-bound, decode memory-bound → separate GPU pools. Cutting-edge at Google/Meta scale.'),
+        t('📚 Bookmark <b>Jonas Geiping’s inference seminar</b> list as your go-deeper reference (primary paper + vLLM/SGLang code per topic)'),
+      ]),
+      {name:'Mock — 2 Mediums (45 min)', color:'coding', time:'45 min', tasks:[
+        t('2 random mediums (rotate patterns). 45-min timer, narrate aloud, test.'),
+        t('Debrief stalls into the review queue.'),
+      ]},
+      cMLSD([ t('Whiteboard rep #2: <b>Ads CTR prediction pipeline</b> — features, model, calibration, online metrics') ]),
+      cFund([
+        t('📊 <b>SQL</b>: 2 problems — <b>subqueries + CTEs</b> (build readable multi-step queries)'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: when <b>speculative decoding</b> helps vs hurts'),
+        t('🔁 Legacy concept: <b>RAG end-to-end</b> from memory (ingest→chunk→embed→index→retrieve→rerank→generate)'),
+      ]),
+      cLog(),
+    ]),
+    day(12,'2026-08-01','Sat Aug 1','Serving Stacks  +  FastAPI Service  +  Checkpoint','vLLM/TGI/SGLang; async serving path',[
+      cInf([
+        t('📘 Handbook: serving-framework comparison (vLLM vs TGI vs SGLang) — strengths and when to pick each'),
+      ]),
+      cBuild([
+        t('🛠 Build the end-to-end serving path in <b>FastAPI</b> with <b>async</b> endpoints: request → user emb → FAISS → features → ranker → top-10'),
+      ]),
+      cDSA([ p('<b>Unique Paths</b> (LC 62) '+M), p('<b>Kth Smallest in a BST</b> (LC 230) — re-time '+M) ]),
+      cFund([
+        t('DL architectures (training-side, not just the inference you already know): <b>CNN</b> (conv/pooling/receptive field), <b>RNN/LSTM</b> (recurrence + vanishing gradient), <b>Transformer</b> (QKV, multi-head attention, positional encoding)'),
+      ]),
+      cJob([
+        t('✍️ <b>STAR bank #3–4</b>: write a Conflict/Disagree-and-Commit story and a Failure/Learning story (2 min each)'),
+      ]),
+      cSR([
+        t('🔁 Week-2 chain recall: PagedAttn → FlashAttn → continuous batching → spec decode → disaggregation (one line each)'),
+        t('🔁 DSA: re-solve <b>Serialize/Deserialize Binary Tree</b> (LC 297) cold'),
+      ]),
+      ck([
+        r('Rate 1–5: PagedAttn, FlashAttn, batching, spec decode, disaggregation'),
+        r('Retrieval Recall@100: ___ | Ranker NDCG@10: ___ | FastAPI path running? (Y/N)'),
+        r('Pipeline check: referral replies? STAR stories so far: ___/10'),
+      ]),
+    ]),
+    rest(202,'2026-08-02','Sun Aug 2'),
+  ];
+
+  // ================= BLOCK 3 : D13-D18 (+ rest Aug9) — Serving Benchmarks + vLLM Hands-On =================
+  phases[2].days = [
+    day(13,'2026-08-03','Mon Aug 3','Latency Percentiles  +  Baseline Load Test','p50/p90/p99; the number you will beat',[
+      cInf([
+        t('Latency percentiles cold: <b>p50/p90/p95/p99</b>, tail latency, why p99 matters for SLOs and goodput'),
+      ]),
+      cBuild([
+        t('🛠 Write a <b>locust</b> or <b>k6</b> load test. Record p50/p90/p95/p99 at 1/10/50/100 concurrent users; max QPS before p99&gt;200ms; memory footprint'),
+        t('📌 <b>This is your unoptimized baseline</b> — save every number; all optimizations get measured against it'),
+      ]),
+      cDSA([ p('<b>Burst Balloons</b> (LC 312) '+H) ]),
+      cJob([
+        t('🚀 <b>Apply batch #1</b>: submit to your top target roles, referrals first. Once resume #1 has real numbers from Day 5/9, these go out. Aim for 5–8 quality applications, not spray-and-pray'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: vLLM vs TGI vs SGLang — when each'),
+        t('🔁 Legacy concept: metrics — <b>NDCG/MAP/AUC</b> + the offline↔online gap'),
+      ]),
+      cLog([ r('Baseline p99 latency / max QPS: ___ / ___ | Applications sent: ___') ]),
+    ]),
+    day(14,'2026-08-04','Tue Aug 4','Prefix & Chunked Prefill  +  Profile the Service','Where the time goes; pick the top-2 bottlenecks',[
+      cInf([
+        t('📘 <b>Prefix caching</b> and <b>chunked prefill</b>: what they do, when they help (shared prompts; long prompts blocking decode)'),
+      ]),
+      cBuild([
+        t('🛠 Profile the service — where does time go: embedding? FAISS? feature lookup? ranker forward? Identify the top-2 bottlenecks to attack in Block 4.'),
+      ]),
+      cDSA([ p('<b>Longest Increasing Path in a Matrix</b> (LC 329) '+G+' '+H) ]),
+      cFund([
+        t('🛠 <b>ML-coding-from-scratch</b> (a distinct interview format): implement <b>logistic regression</b> and a <b>2-layer MLP with manual backprop</b> in raw NumPy — no autograd. Test on a toy dataset'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: p50/p90/p99 + why p99 drives SLOs/goodput'),
+        t('🔁 DSA: re-solve a rusty DP problem (House Robber / Coin Change) cold'),
+      ]),
+      cLog(),
+    ]),
+    day(15,'2026-08-05','Wed Aug 5','Design: LLM Serving Platform  +  Build Buffer','Whiteboard an inference platform; catch up',[
+      cMLSD([
+        t('Whiteboard rep #3 (45-min): <b>LLM serving platform</b> — routing, KV-cache reuse, continuous batching, autoscaling, cost/token, SLOs'),
+      ]),
+      cBuild([
+        t('🛠 Weekend buffer: finish any incomplete FastAPI/benchmark work; commit a clean <b>baseline report</b>'),
+      ]),
+      cInf([ t('📄 Re-skim your PagedAttention + FlashAttention notes — you’ll defend these in the design mock') ]),
+      cDSA([ p('<b>Edit Distance</b> (LC 72) — re-time '+M) ]),
+      cJob([
+        t('📅 <b>Book 2 real mock interviews</b> for the next ~2 weeks (Pramp / interviewing.io free peer mocks, or a paid mock with a FANG engineer). Put them on the calendar now'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: prefix caching vs chunked prefill — what each fixes'),
+        t('🔁 Legacy concept: monitoring — <b>data drift vs model drift</b>, shadow/canary/rollback'),
+      ]),
+      cLog(),
+    ]),
+    day(16,'2026-08-06','Thu Aug 6','MOCK  +  Chip Huyen','Coding + inference-design mock; production ML reading',[
+      {name:'Mock — Graph/DP (45 min)', color:'coding', time:'45 min', tasks:[
+        t('1 medium graph + 1 medium DP. 45-min timer, narrate aloud, test. Debrief into queue.'),
+      ]},
+      {name:'Inference Design Mock (45 min)', color:'sysdesign', time:'45 min', tasks:[
+        t('Design a <b>low-latency LLM serving system</b>: GPU sizing for a 70B model, quantization choice, batching, KV cache, autoscaling. Estimation first, out loud.'),
+      ]},
+      cInf([ t('📗 <b>Chip Huyen — Designing ML Systems</b>: read the serving + monitoring chapters this week') ]),
+      cFund([
+        t('<b>Statistics for MLE</b>: p-values, confidence intervals, <b>statistical power</b>, Type I/II errors — the backbone of every experimentation question'),
+      ]),
+      cSR([
+        t('🔁 Recall week 2–3 inference chain: attention → batching → serving stacks → percentiles → prefix/chunked (out loud)'),
+        t('🔁 DSA: re-solve a weak graph problem cold (Clone Graph / Rotting Oranges)'),
+      ]),
+      cLog([ r('Honest mock score per round (1–4): ___') ]),
+    ]),
+    day(17,'2026-08-07','Fri Aug 7','vLLM Baseline (FP16)  +  ONNX Export','Rent a GPU; TTFT/ITL/throughput; export the ranker',[
+      cInf([
+        t('🖥️ Rent an A100 80GB (~$1.6/hr). Serve baseline FP16: <code>vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000 --max-model-len 4096</code>'),
+        t('🛠 Benchmark (e.g. <code>vllm-benchmark-suite</code>): record <b>TTFT, ITL, throughput</b> at 1/5/10/20 concurrent requests'),
+      ]),
+      cBuild([
+        t('🛠 Start <b>ONNX export</b> of the ranker: <code>torch.onnx.export(model, dummy, "ranker.onnx", dynamic_axes={"input":{0:"batch"}})</code>'),
+      ]),
+      cDSA([ p('<b>Jump Game II</b> (LC 45) — re-time '+M) ]),
+      cJob([
+        t('🎙️ <b>Phone-screen rehearsal</b>: do 1 timed 45-min coding round out loud with a peer/recorder (the phone screen is the first real gate). Debrief communication, not just correctness'),
+      ]),
+      cSR([
+        t('🔁 Recall: two-tower loss + Recall@K meaning + the IVFPQ tradeoff (your own project)'),
+        t('🔁 Legacy concept: <b>prompt vs fine-tune vs RAG</b> — when each + cost implications'),
+      ]),
+      cLog([ r('vLLM FP16 baseline throughput (tok/s): ___'), r('GPU $ spent so far: ___') ]),
+    ]),
+    day(18,'2026-08-08','Sat Aug 8','vLLM Optimizations  +  ONNX Runtime Benchmark  +  Checkpoint','FP8/AWQ, prefix, chunked prefill; ORT vs eager',[
+      cInf([
+        t('🛠 Apply one at a time, re-benchmark after each: FP8 (<code>--quantization fp8</code>) or a pre-quantized AWQ checkpoint; <code>--enable-prefix-caching</code>; <code>--enable-chunked-prefill</code>; tune <code>--max-num-batched-tokens</code> / <code>--max-num-seqs</code>'),
+        t('📊 Record everything in a comparison table — this becomes portfolio material'),
+      ]),
+      cBuild([
+        t('🛠 Benchmark <b>ONNX Runtime vs PyTorch eager</b> for the ranker (expect 1.5–3×). Record the number.'),
+      ]),
+      cDSA([ p('<b>Decode Ways</b> (LC 91) — re-time '+M) ]),
+      cFund([
+        t('📊 <b>SQL</b>: window functions — build a full <b>funnel / retention analysis</b> query end to end (a classic Meta/Amazon SQL round)'),
+      ]),
+      cJob([
+        t('✍️ <b>STAR bank #5–6</b>: a Customer-Obsession / user-impact story and a Bias-for-Action / shipped-fast story'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: the vLLM baseline flags you served + the TTFT/ITL you saw'),
+        t('🔁 DSA: re-solve a backtracking problem (Word Search / Subsets) cold'),
+      ]),
+      ck([
+        r('Rate 1–5: serving stacks, load testing, prefix/chunked prefill, vLLM serving'),
+        r('Baseline service numbers locked (p50/p99/QPS/mem)? (Y/N): ___ | Best vLLM config: ___'),
+        r('Pipeline check: applications out? mocks booked? STAR stories: ___/10'),
+      ]),
+    ]),
+    rest(203,'2026-08-09','Sun Aug 9'),
+  ];
+
+  // ================= BLOCK 4 : D19-D24 (+ rest Aug16) — Serving Optimization · Deploy · Economics =================
+  phases[3].days = [
+    day(19,'2026-08-10','Mon Aug 10','vLLM Write-up  +  FAISS PQ (measured)','Portfolio table; PQ memory/recall/latency',[
+      cInf([
+        t('🛠 Finalize the vLLM <b>optimization table</b> (FP16 → FP8/AWQ → +prefix → +chunked): throughput, TTFT, ITL deltas. Release the GPU when done — watch the budget.'),
+      ]),
+      cBuild([
+        t('🛠 Rigorous <b>IndexFlatIP → IndexIVFPQ</b> before/after: memory (4–8× reduction), Recall@100 loss (&lt;1% with nprobe tuning), retrieval latency drop'),
+      ]),
+      cMLSD([ t('Whiteboard rep #4: <b>Search ranking</b> — query understanding → retrieval → ranking') ]),
+      cJob([
+        t('📧 <b>Referral outreach batch #2</b>: follow up with non-responders + reach 3–5 new contacts. Keep the tracker current (who · when · status)'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: best vLLM config found + the ONNX-vs-eager speedup'),
+        t('🔁 Recall from week 1: AWQ vs GPTQ vs Marlin — quality vs throughput'),
+      ]),
+      cLog([ r('IVFPQ: memory ___× smaller, Recall@100 loss ___%') ]),
+    ]),
+    day(20,'2026-08-11','Tue Aug 11','Redis Feature Cache  +  Integrate','Cache features; re-run the load test',[
+      cBuild([
+        t('🛠 Add a <b>Redis feature cache</b> — precompute &amp; cache user/item features instead of per-request compute; measure the cache-hit latency win'),
+        t('🛠 Integrate ONNX ranker + IVFPQ + Redis into the service; re-run the load test'),
+      ]),
+      cInf([ t('📗 Chip Huyen: finish this week’s chapters (feature engineering / data distribution shifts)') ]),
+      cDSA([ p('<b>Distinct Subsequences</b> (LC 115) '+H) ]),
+      cFund([
+        t('<b>Causal traps</b>: <b>Simpson\'s paradox</b> (be able to give a concrete example), confounders, A/A tests, novelty &amp; primacy effects — the "why did the A/B look wrong?" question'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: the IVFPQ memory/recall/latency numbers you measured'),
+        t('🔁 DSA: re-solve <b>Merge Intervals</b> (LC 56) cold — intervals/greedy'),
+      ]),
+      cLog([ r('Optimized p99 vs baseline p99: ___ vs ___') ]),
+    ]),
+    day(21,'2026-08-12','Wed Aug 12','Before/After Table  +  DP Mock','The resume table; DP-heavy mock',[
+      cBuild([
+        t('🛠 Build the <b>before/after comparison table</b> (baseline vs optimized): p50, p99, max QPS, memory. <b>This table IS your resume bullet.</b>'),
+        t('🔄 <b>Closed-loop light (guide Phase G, time-boxed)</b>: ε-greedy explore head over top-50 <b>with propensity logging</b> + a position-bias click simulator; run T≈20 serve→log→retrain rounds — naive vs <b>IPS-weighted</b> retraining. The plot (naive degrades, IPS holds) is scroll-stopper #2. Spill-over → weekend buffer only.'),
+      ]),
+      {name:'Mock — DP Heavy (45 min)', color:'coding', time:'45 min', tasks:[
+        t('1 medium + 1 hard DP. 45-min timer, narrate aloud. Debrief into queue.'),
+      ]},
+      cJob([
+        t('✍️ <b>STAR bank #7–8</b> + review the whole bank: a Deliver-Results story and a Dive-Deep / debugging story. You should now have ~8 tellable stories'),
+      ]),
+      cSR([
+        t('🔁 Recall the full serving chain: FastAPI → FAISS(IVFPQ) → ONNX ranker → Redis cache'),
+        t('🔁 Recall: <b>continuous batching</b> + KV cache — why they matter together'),
+      ]),
+      cLog(),
+    ]),
+    day(22,'2026-08-13','Thu Aug 13','Parallelism Strategies  +  Dockerize + Prometheus','TP/PP/EP; containerize the service + metrics',[
+      cInf([
+        t('<b>Parallelism</b> cold: <b>Tensor Parallelism</b> (split layers on-node, needs NVLink, TP=4/8), <b>Pipeline Parallelism</b> (stages across nodes), <b>Expert Parallelism</b> (MoE). When each.'),
+        t('GPU sizing recap: 70B FP16 = 140GB → multi-GPU; INT4 = 35GB → single H100'),
+      ]),
+      cBuild([
+        t('🛠 <b>Dockerize</b> the full service (retrieval + ranking + API); add <b>Prometheus</b> metrics: latency histogram, throughput, cache-hit rate, inference time'),
+      ]),
+      cDSA([ p('<b>Regular Expression Matching</b> (LC 10) '+H) ]),
+      cFund([
+        t('<b>Estimation drills</b> (Amazon/Meta "reason under uncertainty"): Fermi-estimate a metric out loud, stating assumptions'),
+        t('📊 <b>SQL on messy data</b>: dedup, coalesce, date-parsing edge cases — the realistic version of the round'),
+      ]),
+      cSR([
+        t('🔁 Recall this week: vLLM opt → PQ → ONNX → Redis → before/after table'),
+        t('🔁 DSA: re-solve a heap problem cold (K Closest / Task Scheduler)'),
+      ]),
+      cLog(),
+    ]),
+    day(23,'2026-08-14','Fri Aug 14','Multi-GPU + K8s  +  Grafana Dashboard','TP serving; observability dashboard',[
+      cInf([
+        t('📘 <b>SitePoint 2026 vLLM Production Guide</b>: Docker, K8s + NVIDIA GPU Operator, KEDA autoscaling, health checks, security'),
+        t('(Optional, budget permitting) serve 70B with <code>--tensor-parallel-size 4</code>; compare vs the 8B single-GPU run'),
+      ]),
+      cBuild([
+        t('🛠 Stand up a <b>Grafana</b> dashboard (docker-compose): p50/p95/p99 over time, QPS, cache-hit rate + a cold-start ingestion counter'),
+        t('📊 <b>Beyond-accuracy harness (guide Phase H)</b>: ILD (diversity), novelty, coverage@K, popularity-bias, per-activity-decile fairness — run it on every model version; add the <b>MMR λ re-rank</b> and sweep λ → the engagement-vs-diversity curve'),
+      ]),
+      cMLSD([ t('Whiteboard rep #5: <b>Fraud/abuse detection</b> — real-time streaming features + low-latency scoring') ]),
+      cJob([
+        t('🚀 <b>Apply batch #2</b>: expand to more target roles now that resume #2 (FDE) is ready; keep referrals first. Follow up on batch #1 (a nudge after ~1 week doubles response rates)'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: TP vs PP vs EP — when each'),
+        t('🔁 Legacy concept: serving — latency vs throughput, quantization, distillation'),
+      ]),
+      cLog(),
+    ]),
+    day(24,'2026-08-15','Sat Aug 15','Fleet Economics + GPU Selection  +  A/B Test  +  Checkpoint','Cost/token, spot vs on-demand; simulated A/B',[
+      cInf([
+        t('📘 <b>Spheron Inference Engineering Guide</b> + SitePoint Enterprise: cost-per-token math, spot vs on-demand, TCO cloud vs on-prem'),
+        t('GPU landscape cold: A100 80GB (~$1.6, 7–34B), H100 SXM (~$2.9, 34–70B best price-perf), H200 141GB (~$4.5, memory-bound), B200 192GB (~$6+)'),
+      ]),
+      cBuild([
+        t('🛠 <b>Simulated A/B test</b>: control (ranker v1) vs treatment (v2 arch/loss weighting). Per-group NDCG@10 + CTR; run a <b>t-test / Mann-Whitney U</b> for significance'),
+      ]),
+      cDSA([ p('<b>Wildcard Matching</b> (LC 44) '+H) ]),
+      cMLSD([ t('Product-sense rep (Meta-style): "How would you improve <b>[a feed / notifications / a recommendation surface]</b>?" — clarify the goal, define a success metric + guardrails, propose 2 experiments, name the tradeoffs') ]),
+      cJob([
+        t('💰 <b>Negotiation research</b>: pull comp bands from levels.fyi for each company/level; note your BATNA and how you\'d answer "what\'s your current comp / other offers?"'),
+      ]),
+      cSR([
+        t('🔁 Recall yesterday: K8s + GPU Operator + KEDA autoscaling essentials'),
+        t('🔁 DSA: re-solve one pattern-matching DP approach (Regex / Wildcard)'),
+      ]),
+      ck([
+        r('Rate 1–5: parallelism, deploy/K8s, fleet economics, A/B stats'),
+        r('Optimized service: p99 ___→___, QPS ___→___, mem ___→___ | GPU total spend: ___'),
+        r('Pipeline check: batch-2 apps out? mocks done/scheduled? STAR bank: ___/10'),
+      ]),
+    ]),
+    rest(204,'2026-08-16','Sun Aug 16'),
+  ];
+
+  // ================= BLOCK 5 : D25-D27 — Mocks · Portfolio · Coding Gate =================
+  phases[4].days = [
+    day(25,'2026-08-17','Mon Aug 17','FULL MOCK DAY  +  Retraining Trigger','Two coding + one design; drift-triggered retraining',[
+      {name:'Coding Mock #1 (45 min)', color:'coding', time:'45 min', tasks:[ t('Medium-hard, DS focus. 45-min timer. Debrief 30 min.') ]},
+      {name:'Coding Mock #2 (45 min)', color:'coding', time:'45 min', tasks:[ t('Hard, graph/DP focus. 45-min timer. Debrief 30 min.') ]},
+      {name:'System Design Mock (45 min)', color:'sysdesign', time:'45 min', tasks:[ t('A design you have NOT done — recsys-at-scale OR inference platform. Estimation → deep dive → tradeoffs.') ]},
+      cBuild([ t('🛠 Add a <b>retraining trigger</b>: monitor prediction-distribution drift (PSI or KS test); auto-retrain past threshold. Answers “what happens after you deploy?”') ]),
+      cJob([ t('📈 Keep the pipeline warm: reply to any recruiter/referral threads within 24h; log where each application stands') ]),
+      cSR([
+        t('🔁 Recall the GPU landscape (A100/H100/H200/B200) + cost/token intuition'),
+        t('🔁 Recall: A/B testing stats — t-test / Mann-Whitney, guardrail metrics'),
+      ]),
+      cLog([
+        r('🚦 <b>CODING READINESS GATE</b>: did I clear BOTH mediums in ≤45 min, clean, narrating aloud? (Y/N)'),
+        r('If N → add 3 timed mediums/day (NeetCode 150 weak patterns) until Y before real onsites. This is the hard gate.'),
+        r('Honest interviewer score per round (1–4): ___ | Top 3 fixes: ___'),
+      ]),
+    ]),
+    day(26,'2026-08-18','Tue Aug 18','Targeted Fixes  +  README + Diagram','Close mock gaps; production README + architecture',[
+      cRev([ t('Re-solve the exact problem types you missed in the mock, cold') ]),
+      {name:'Targeted Drills', color:'coding', time:'75 min', tasks:[ t('5 focused problems from your mock weak areas; each under 20 min') ]},
+      cBuild([
+        t('🛠 Write the production <b>README</b>: architecture diagram (retrieval → ranking → serving → monitoring), one-command Docker setup, benchmark table, design decisions &amp; tradeoffs'),
+        t('🎨 Clean <b>architecture diagram</b> (Excalidraw or draw.io)'),
+        t('🖥️ <b>Interactive explainable demo (guide Phase H #32)</b>: user picker → top-10 with a <b>“why this?”</b> panel (retrieval + ranker scores, top cross-features); the <b>🧊 cold-start box</b> (paste new item text → watch it get recommended live); MMR λ slider + explore toggle; live p99/$ readout. <b>This is what interviewers remember.</b>'),
+      ]),
+      cSR([
+        t('🔁 Recall the FULL inference stack, no notes: prefill/decode → KV cache → quant → PagedAttn/FlashAttn → batching → spec decode → serving → economics'),
+        t('🔁 Recall your project’s 2 resume numbers (Recall@100, NDCG@10) + the before/after latency table'),
+      ]),
+      cLog(),
+    ]),
+    day(27,'2026-08-19','Wed Aug 19','Portfolio Freeze + Mid-Point Checkpoint','Project locked with real numbers → the resume goes live',[
+      cBuild([
+        t('🛠 Freeze the project. Finalize <b>XYZ resume bullets</b> (guide has the full wording): two-stage engine — Recall@100 X (+Z% over baseline), NDCG@10 Y; <b>🧊 +X% strict-cold Recall via LLM content embeddings</b> (new items live in seconds); <b>🔄 feedback-loop bias shown &amp; fixed with IPS retraining</b>; p99 A→B ms via IVFPQ + ONNX + Redis at D QPS; drift→retrain→A/B with significance'),
+        t('🛠 Verify the service runs live; GitHub + demo + report URLs ready'),
+      ]),
+      cJob([
+        t('🚀 <b>Update both resumes with the real numbers and re-send</b> to anyone mid-conversation; fire off a fresh application batch now that the portfolio is concrete. The build is done — from here the focus shifts to interviews.'),
+      ]),
+      cMLSD([ t('Skim all 5 design one-pagers + the framework card. Light — no grinding.') ]),
+      cSR([
+        t('🔁 Recall sweep: pick your 3 weakest-rated topics so far and explain each in 60s'),
+        t('🔁 Skim your weakest-pattern DSA template'),
+      ]),
+      {name:'Mid-Point Self-Assessment', color:'retro', time:'15 min', tasks:[
+        r('Medium solve time now vs Day 1: ___ → ___ min | Coding gate cleared? (Y/N)'),
+        r('Can I explain the full inference stack with no notes? (Y/N): ___'),
+        r('Fundamentals (bias-variance, backprop, stats, SQL) solid? weakest area: ___'),
+        r('Pipeline: applications out ___ | referrals in-flight ___ | STAR bank ___/10. Next: Project 2 (LLM gateway+RAG) → Project 3 (research paper) → final mocks — keep applying throughout.'),
+      ]},
+    ]),
+  ];
+
+  // ================= BLOCK 6 : D28-D33 (+ rest Aug23) — PROJECT 2: LLM Inference Gateway + RAG =================
+  // Second portfolio project. It deliberately REUSES Project 1's infrastructure (FastAPI async, FAISS,
+  // Docker, vLLM, Prometheus/Grafana, Redis) so it doesn't double the work. You build a production-shaped
+  // inference gateway (routing · semantic cache · rate limit · streaming · observability) that fronts a
+  // vLLM backend and serves a full RAG app (ingest → chunk → embed → hybrid retrieve → rerank → cite).
+  // The RAG-eval harness you build here (Day 32) becomes the measuring instrument for Project 3.
+  phases[5].days = [
+    day(28,'2026-08-20','Thu Aug 20','Project 2 Kickoff — Architecture + RAG Ingestion','Scaffold the gateway; stand up vLLM backend; build the ingestion pipeline',[
+      cGW([
+        t('🛠 Scaffold the <b>gateway repo</b> (README stub, env, docker-compose skeleton). Draw the architecture: <code>client → gateway (FastAPI) → [semantic cache · router · rate limiter] → vLLM backend</code>; RAG path: <code>ingest → chunk → embed → FAISS → rerank → prompt → vLLM → cite</code>'),
+        t('🛠 Build the <b>ingestion pipeline</b>: load a corpus (your own PDFs / a Wikipedia or docs subset), <b>chunk</b> (fixed-size + overlap, and a semantic/recursive splitter), embed with a sentence-transformer (e.g. <code>bge-small</code>), index in <b>FAISS</b>'),
+        t('♻️ Reuse from Project 1: the FAISS index code, the FastAPI async patterns, the Docker setup — this is why Project 2 is fast to build'),
+      ]),
+      cInf([
+        t('🖥️ Stand up the <b>vLLM backend</b> the gateway will call: <code>vllm serve meta-llama/Llama-3.1-8B-Instruct</code> exposing the OpenAI-compatible endpoint. Confirm you can hit <code>/v1/chat/completions</code>'),
+      ]),
+      cDSA([ p('<b>Time Based Key-Value Store</b> (LC 981) — re-time '+G+' '+M) ]),
+      cJob([ t('📈 Pipeline: chase warm threads; nudge referrers who haven\'t replied; keep the tracker current') ]),
+      cSR([
+        t('🔁 Recall: <b>RAG end-to-end</b> from memory (ingest→chunk→embed→index→retrieve→rerank→generate) — you\'re about to build it'),
+        t('🔁 Recall Project 1 as a design-round answer (retrieval → ranking → serving → monitoring)'),
+      ]),
+      cLog([ r('Gateway scaffolded + vLLM backend reachable? (Y/N): ___') ]),
+    ]),
+    day(29,'2026-08-21','Fri Aug 21','Hybrid Retrieval + Reranking + Prompt Assembly','Dense+BM25 fusion; cross-encoder rerank; grounded prompts (resume #3)',[
+      cGW([
+        t('🛠 Implement <b>hybrid retrieval</b>: dense (FAISS) + sparse (BM25/keyword), fuse with <b>Reciprocal Rank Fusion</b>'),
+        t('🛠 Add a <b>cross-encoder reranker</b> (e.g. <code>bge-reranker</code>) over the fused candidates; measure <b>retrieval Recall@k before vs after rerank</b>'),
+        t('🛠 <b>Prompt assembly</b> with grounding + inline <b>citations</b>; enforce a context-window token budget (truncate/pack)'),
+        t('📌 Third project\'s first resume number: “retrieval Recall@k of X; reranking +Y%.” Write it into the README.'),
+      ]),
+      cMLSD([ t('GenAI design rep (now grounded in what you\'re building): design a <b>RAG system</b> — chunking, hybrid retrieval, reranking, grounding/citations, hallucination guardrails, latency budget, eval') ]),
+      cDSA([ p('<b>Design Search Autocomplete System</b> (LC 642) '+H) ]),
+      cSR([
+        t('🔁 Recall: <b>prompt vs fine-tune vs RAG</b> (when each + cost) — you\'ll defend this in a GenAI round'),
+        t('🔁 DSA: re-solve <b>Word Break</b> (LC 139) cold — DP + trie option'),
+      ]),
+      cLog([ r('Retrieval Recall@k before/after rerank: ___ → ___') ]),
+    ]),
+    day(30,'2026-08-22','Sat Aug 22','Gateway Core — Streaming · Routing · OpenAI-Compatible API','FastAPI SSE streaming; model routing + fallback; wire the full RAG path',[
+      cGW([
+        t('🛠 Build the <b>gateway service</b>: an OpenAI-compatible <code>/v1/chat/completions</code> with <b>SSE streaming</b> and an async request queue'),
+        t('🛠 <b>Routing</b>: route by request metadata (e.g. small vs large model, RAG vs raw) with a graceful <b>fallback</b> path on backend error/timeout'),
+        t('🛠 Wire the <b>full RAG path end-to-end</b> through the gateway: query → retrieve → rerank → prompt → vLLM (streamed) → cited answer'),
+      ]),
+      cInf([ t('Revisit <b>continuous batching</b>: how the gateway should cooperate with (not fight) vLLM\'s batching — keep the gateway thin, let vLLM batch') ]),
+      cDSA([ p('<b>LRU Cache</b> (LC 146) — re-time '+M) ]),
+      cSR([
+        t('🔁 Recall yesterday: RRF fusion + why a cross-encoder reranker beats bi-encoder ordering'),
+        t('🔁 Recall Project 1\'s FastAPI async serving path — you\'re reusing the pattern'),
+      ]),
+      cLog([ r('Streaming RAG answer with citations working end-to-end? (Y/N): ___') ]),
+    ]),
+    rest(206,'2026-08-23','Sun Aug 23'),
+    day(31,'2026-08-24','Mon Aug 24','Semantic Cache + Rate Limiting + Observability','Cache by meaning; token-bucket limits; Prometheus/Grafana (resume #4)',[
+      cGW([
+        t('🛠 <b>Semantic cache</b>: embed the incoming query → similarity search (FAISS/Redis) → if above a threshold, return the cached answer. Measure the <b>cache-hit latency win + $ saved</b>'),
+        t('🛠 <b>Rate limiting</b>: token-bucket per API key, Redis-backed; return proper 429s'),
+        t('🛠 <b>Observability</b>: Prometheus metrics (TTFT, tokens/s, cache-hit rate, queue depth, error rate) + a <b>Grafana</b> dashboard — reuse Project 1\'s monitoring stack'),
+        t('📌 Resume number: “semantic cache hit-rate X% → Y% latency / $ reduction.”'),
+      ]),
+      cDSA([ p('<b>Design Hit Counter</b> (LC 362) '+M) ]),
+      cSR([
+        t('🔁 Recall: latency percentiles (p50/p90/p99) — you\'ll report gateway p99 in the write-up'),
+        t('🔁 DSA: re-solve <b>Merge Intervals</b> (LC 56) cold'),
+      ]),
+      cLog([ r('Semantic cache hit-rate / latency win: ___% / ___') ]),
+    ]),
+    day(32,'2026-08-25','Tue Aug 25','RAG Evaluation Harness (feeds Project 3)','Faithfulness · answer-relevance · context precision/recall — the instrument for the paper',[
+      cGW([
+        t('🛠 Build a <b>RAG eval harness</b>: metrics = <b>faithfulness/groundedness</b>, <b>answer relevance</b>, <b>context precision/recall</b> (RAGAS-style + <b>LLM-as-judge</b> with an explicit rubric)'),
+        t('🛠 Assemble a small <b>eval question set</b> with ground-truth answers (hand-write ~30–50, or take a subset of a public QA/RAG benchmark)'),
+        t('⭐ Build this carefully — <b>this harness IS Project 3\'s measuring instrument</b>. It must be reproducible and configurable (swap model/quant/index and re-score)'),
+      ]),
+      cInf([ t('📘 <b>LLM-as-judge biases</b> (position, verbosity, self-preference) and how to mitigate (pairwise, randomized order, rubric anchoring) — you\'ll defend this in the LLM-eval design round') ]),
+      cDSA([ p('<b>Kth Largest Element in a Stream</b> (LC 703) — re-time '+E) ]),
+      cSR([
+        t('🔁 Recall: LLM evaluation pipeline design — offline sets, judge + biases, human loop, regression gating'),
+        t('🔁 DSA: re-solve a heap problem cold (K Closest Points)'),
+      ]),
+      cLog([ r('Eval harness scoring a config end-to-end? (Y/N) | eval-set size: ___') ]),
+    ]),
+    day(33,'2026-08-26','Wed Aug 26','Dockerize + Load Test + Write-up  +  Checkpoint','One-command stack; benchmark the gateway; Project 2 resume bullet',[
+      cGW([
+        t('🛠 <b>docker-compose the whole stack</b> (gateway + vLLM + Redis + FAISS + Prometheus + Grafana) → <b>one-command up</b>'),
+        t('🛠 <b>Load test</b> the gateway (locust/k6): p50/p99, throughput, and the <b>before/after semantic-cache</b> effect on latency + cost'),
+        t('🛠 <b>README + architecture diagram + resume bullet</b>: “LLM inference gateway (routing · semantic cache · rate limit · streaming · observability) fronting vLLM, serving a hybrid-retrieval RAG app — cache hit-rate X%, p99 A→B ms, $/1k-queries −Z%.”'),
+      ]),
+      cJob([ t('🚀 <b>Apply batch #3</b> + update both resumes with the Project 2 bullet; route through referrals first') ]),
+      cSR([ t('🔁 Recall the full Project 2 path (gateway → cache → RAG → vLLM → observability) as a 90-second design answer') ]),
+      ck([
+        r('Rate 1–5: RAG retrieval/rerank, gateway (routing/cache/limits), observability, RAG eval'),
+        r('Project 2 numbers locked: cache hit-rate ___ | p99 ___→___ | eval harness reproducible? (Y/N)'),
+        r('Pipeline check: applications out? mocks booked? STAR bank: ___/10'),
+      ]),
+    ]),
+  ];
+
+  // ================= BLOCK 7 : D34-D38 (+ rest Aug30) — PROJECT 3: RESEARCH + PAPER =================
+  // Third portfolio piece and the real differentiator: a first-author empirical paper,
+  // "The Efficiency–Faithfulness Frontier of RAG" — how LLM quantization (FP16→FP8→INT4) and
+  // retrieval-index compression (FAISS Flat vs IVFPQ) JOINTLY trade off RAG answer-quality vs
+  // latency/cost. It reuses Projects 1 & 2 as the experimental apparatus, is cheap to run, and fills
+  // a real gap (quant papers report perplexity, not downstream RAG faithfulness) → credible arXiv
+  // preprint + workshop submission.
+  phases[6].days = [
+    day(34,'2026-08-27','Thu Aug 27','Research Framing — Gap · Hypotheses · Design','Literature scan; the question; the experimental grid + metrics + dataset',[
+      cRes([
+        t('📚 <b>Literature scan</b> (3–4 papers): AWQ, GPTQ, FAISS/IVFPQ, RAGAS + one RAG survey. Write a 1-paragraph <b>gap statement</b>: quant papers report <i>perplexity</i>, not <i>downstream RAG faithfulness</i>'),
+        t('🎯 Formalize the <b>research question + hypotheses</b>. Define the <b>experimental grid</b>: <code>{FP16, FP8, AWQ-INT4} × {FAISS Flat, IVFPQ (2–3 nprobe/PQ settings)}</code>'),
+        t('📏 Define <b>metrics</b>: quality (faithfulness, answer-relevance, EM/F1) vs cost (TTFT, tokens/s, $/1k queries, index memory). Pick the <b>dataset</b> (Natural Questions / HotpotQA subset, or a domain corpus)'),
+      ]),
+      cMLSD([ t('GenAI design rep: <b>LLM evaluation pipeline</b> — offline sets, LLM-as-judge + biases, human review loop, regression gating (you literally built one on Day 32)') ]),
+      cJob([ t('📈 Pipeline (light): keep threads warm; log status changes') ]),
+      cSR([ t('🔁 Recall from Block 1: AWQ salient-channel insight + FP-format tradeoffs (the paper\'s independent variable)') ]),
+      cLog([ r('Gap statement + grid + metrics + dataset all decided? (Y/N): ___') ]),
+    ]),
+    day(35,'2026-08-28','Fri Aug 28','Build the Experimental Apparatus','Parametrize the gateway over the grid; automate the sweep + logging',[
+      cRes([
+        t('🛠 Wire the harness: <b>parametrize Project 2\'s gateway</b> over the quant × index grid — each cell is one reproducible run'),
+        t('🛠 Prepare backends/indexes: serve <b>FP16 / FP8 / AWQ-INT4</b> in vLLM; build the <b>Flat vs IVFPQ</b> indexes from Project 1'),
+        t('🛠 Automate: a driver script that runs the full grid, logs quality (Day-32 harness) + latency/cost per cell to a <b>results CSV</b>; pin seeds + config files for <b>reproducibility</b>'),
+      ]),
+      cInf([ t('Sanity-plan the compute: which cells need the GPU, batch them to minimize rented hours (watch the ~$30–50 budget)') ]),
+      cDSA([ p('<b>Find Median from Data Stream</b> (LC 295) — re-time '+H) ]),
+      cSR([ t('🔁 Recall: IVFPQ memory/recall/latency tradeoff (your Project-1 measurement) — it\'s a grid axis now') ]),
+      cLog([ r('Grid driver runs one full cell end-to-end (quality + cost logged)? (Y/N): ___') ]),
+    ]),
+    day(36,'2026-08-29','Sat Aug 29','Run the Experiments','Sweep the full grid on GPU; collect the results; sanity-check',[
+      cRes([
+        t('🛠 Execute the <b>full sweep</b> on a rented GPU; babysit the runs; collect the complete results grid. Release the GPU promptly and <b>log GPU $ spent</b>'),
+        t('🔎 Sanity checks: does <b>FP16 + Flat</b> top quality? does <b>INT4 + IVFPQ</b> minimize cost? Capture outliers/failures with notes for the discussion section'),
+      ]),
+      cJob([ t('📈 Pipeline (light): 24h replies to any recruiter/referral threads') ]),
+      cSR([ t('🔁 Recall the FP-format + index-compression axes and your prior expectations before you look at the plots') ]),
+      cLog([ r('Full grid data collected? (Y/N) | GPU $ this run: ___') ]),
+    ]),
+    rest(207,'2026-08-30','Sun Aug 30'),
+    day(37,'2026-08-31','Mon Aug 31','Analysis + Figures','The Pareto frontier; significance testing; actionable findings',[
+      cRes([
+        t('📊 Plot the <b>efficiency–faithfulness Pareto frontier</b> (quality vs cost, one point per config); mark the <b>knee / sweet-spot</b> configuration'),
+        t('📈 <b>Statistical significance</b> on the quality deltas (bootstrap CIs / paired tests): is INT4\'s faithfulness drop actually significant, or noise?'),
+        t('✍️ Write the <b>findings</b>: 3–4 concrete, actionable takeaways an engineer can use ("for &lt;X ms budget, AWQ-INT4 + IVFPQ loses only Y% faithfulness at Z× lower cost")'),
+      ]),
+      cMLSD([ t('Product-sense rep (light): frame the paper\'s result as a product decision — "which config would you ship, and what guardrail would you watch?"') ]),
+      cSR([ t('🔁 Recall: A/B significance stats (t-test / bootstrap / Mann-Whitney) — the same tools you\'re using on the paper') ]),
+      cLog([ r('Pareto plot done + sweet-spot config identified: ___') ]),
+    ]),
+    day(38,'2026-09-01','Tue Sep 1','Write the Paper  +  Checkpoint','arXiv/workshop draft; release code; plan submission (resume #5)',[
+      cRes([
+        t('✍️ Draft the <b>paper</b> (arXiv/workshop format): abstract · intro+gap · method · experimental setup · results+figures · discussion · limitations · related work'),
+        t('♻️ Make it <b>reproducible</b>: release code + config files + the results CSV; add a "reproduce" section pointing at Projects 1 & 2'),
+        t('🚀 Plan <b>submission</b>: post an <b>arXiv preprint</b> now; target an efficient-ML / ENLSP-style <b>workshop</b>. Add the resume bullet: “First-author empirical study on the efficiency–faithfulness frontier of RAG — arXiv preprint.”'),
+      ]),
+      cJob([ t('🚀 Add the paper + Project 2 to both resumes; send a fresh application batch — you now have <b>3 shipped projects</b> (recsys+serving · LLM gateway+RAG · research paper)') ]),
+      ck([
+        r('Rate 1–5: research framing, experiment rigor, analysis/stats, writing'),
+        r('Paper drafted + code released + arXiv plan? (Y/N) | sweet-spot finding stated in one sentence: ___'),
+        r('Portfolio: all 3 projects have live URLs + resume bullets? (Y/N)'),
+      ]),
+    ]),
+  ];
+
+  // ================= BLOCK 8 : D39-D41 — FDE RAPID-BUILD SPRINTS =================
+  // Distinct muscle from the polished portfolio projects. FDE loops (Palantir/OpenAI/Anthropic/Meta-FDE)
+  // test rapid full-stack prototyping under ambiguity, scope-cutting out loud, messy-data wrangling, and
+  // defending v0 choices to a "customer" — NOT algorithmic depth. These 3 sprints are deliberately
+  // disposable; they reuse your RAG/gateway/embedding pieces so you can ship fast under a hard timebox.
+  phases[7].days = [
+    day(39,'2026-09-02','Wed Sep 2','FDE Sprint I — Rapid Full-Stack Build','Ship a working prototype, fast, under ambiguity',[
+      cFDE([
+        t('Read/reflect: what an <b>FDE interview loop</b> actually tests (Palantir/OpenAI/Anthropic/Meta-FDE-style) — rapid prototyping, ambiguity tolerance, customer empathy, full-stack ownership, <i>not</i> algorithmic depth'),
+        t('🛠 Pick a deliberately vague prompt (e.g. "build a tool that lets a support team search past tickets semantically") and ship a <b>working full-stack prototype</b> — FastAPI + a minimal frontend + your RAG/embedding pieces from Project 2 — inside a hard <b>3-hour timebox</b>'),
+        t('Narrate your scope-cutting decisions out loud as you go — that IS the skill being evaluated, not code quality'),
+      ]),
+      cDSA([ p('<b>Insert Delete GetRandom O(1)</b> (LC 380) — re-time '+M) ]),
+      cJob([ t('📈 Pipeline: chase warm threads; nudge non-responders; keep the tracker current') ]),
+      cSR([ t('🔁 Recall your Project 2 serving path (gateway → retrieve → rerank → generate) — you reuse these pieces in every FDE build') ]),
+      cLog([ r('What did I cut to hit the timebox, and would I defend that cut to a customer? ___') ]),
+    ]),
+    day(40,'2026-09-03','Thu Sep 3','FDE Sprint II — Data Wrangling Under Ambiguity','Messy real data; a contradictory-requirements role-play',[
+      cFDE([
+        t('🛠 Take a messy, undocumented dataset (mismatched schemas, nulls, inconsistent formats); write an <b>ETL script</b> that cleans/joins/transforms it into a usable shape inside a timebox; document every assumption you made'),
+        t('Role-play "the customer\'s requirements are vague and contradictory": practice asking clarifying questions, proposing a v0 scope, and iterating live (with a friend/partner if possible, or against a written scenario)'),
+      ]),
+      cDSA([ p('<b>Meeting Rooms II</b> (LC 253) — re-time '+G+' '+M) ]),
+      cJob([ t('📅 Confirm this week\'s booked mocks; prep a fresh ambiguous prompt for each') ]),
+      cSR([ t('🔁 Recall: hybrid retrieval + reranking — the reusable core of any FDE search/retrieval build') ]),
+      cLog([ r('Which assumption would I most want to confirm with the customer first? ___') ]),
+    ]),
+    day(41,'2026-09-04','Fri Sep 4','FDE Sprint III — Live Build + Customer Pitch','Full mock: build, demo, defend under Q&A',[
+      cFDE([
+        t('🛠 Full mock FDE round: fresh ambiguous prompt → build + demo in ~90 min → <b>5-min pitch to a "customer"</b> (partner or rubber-duck) → live Q&amp;A defending your choices'),
+        t('Rehearse the "why FDE alongside MLE" narrative: deployment speed, customer empathy, cross-stack ownership, comfort shipping imperfect v0s — and how your 3 shipped projects prove it'),
+      ]),
+      cSR([ t('🔁 Recall the 3 FDE lessons from this week (scope-cut, clarify-then-build, defend-the-v0) in one line each') ]),
+      cLog([ r('Rate the pitch 1–5: clarity, confidence, handling pushback. Weakest part: ___') ]),
+    ]),
+  ];
+
+  // ================= BLOCK 9 : D42-D45 (+ rest Sep6) — Design · LPs · Full-Loop Mocks · Wrap =================
+  // Pure interview-execution. With 3 projects shipped AND FDE reps done, the GenAI + product-sense design
+  // rounds, the behavioral bank, and the FDE build round are all backed by real, defensible work. Two full
+  // onsite simulations close it out. The job search has run in parallel since Day 1 and does NOT stop here.
+  phases[8].days = [
+    day(42,'2026-09-05','Sat Sep 5','GenAI + Product-Sense Design Day','The 2026 MLE design rounds — now spoken from things you actually built',[
+      {name:'GenAI Design Reps (out loud, ~30 min each)', color:'sysdesign', time:'90 min', tasks:[
+        t('Rep: design a <b>RAG system</b> — you built one (Project 2). Speak from experience: chunking, hybrid retrieval, reranking, grounding/citations, guardrails, latency budget, eval'),
+        t('Rep: design an <b>LLM evaluation pipeline</b> — you built the harness (Day 32) + a whole paper on it (Project 3): offline sets, LLM-as-judge + biases, human loop, regression gating'),
+        t('Rep: design an <b>agentic system</b> — tool use, planning/looping, memory, failure/timeout handling, cost controls, guardrails vs prompt injection'),
+      ]},
+      cMLSD([
+        t('Product-sense rep: "<b>How would you improve [Reels / Shorts / a recommendation surface]?</b>" — clarify goal, north-star + guardrail metrics, propose experiments, name tradeoffs'),
+      ]),
+      cJob([ t('📈 Pipeline: chase warm threads; nudge non-responders; keep the tracker current') ]),
+      cSR([ t('🔁 Recall all 3 projects as crisp 90-second design answers — these ARE your best design-round material') ]),
+      cLog([ r('Which GenAI design felt weakest, and why? ___') ]),
+    ]),
+    rest(208,'2026-09-06','Sun Sep 6'),
+    day(43,'2026-09-07','Mon Sep 7','Amazon LPs + Company-Loop Prep + Broad Applications','Consolidate STAR → LPs; know each loop; widen the funnel; book final mocks',[
+      {name:'Amazon Leadership Principles — Consolidation', color:'behavioral', time:'60 min', tasks:[
+        t('Map your <b>~8–10 STAR stories</b> (built through Blocks 1–7 — now including 3 shipped projects) to Amazon\'s 16 LPs; ensure <b>2+ strong stories</b> per top-6 LP (Ownership, Bias for Action, Dive Deep, Customer Obsession, Deliver Results, Disagree &amp; Commit)'),
+        t('<b>Pressure-test your best story</b> against 5 escalating "dive deep" follow-ups (the bar-raiser probes ONE story for 15+ min)'),
+      ]},
+      {name:'Company Loop Research', color:'sysdesign', time:'20 min', tasks:[
+        t('Google: coding + <b>Googleyness &amp; leadership</b> + ML system design + (sometimes) GCA'),
+        t('Meta: coding + ML system design + product/ML sense + values-based behavioral'),
+        t('Amazon: coding + ML breadth/depth + an <b>LP-only bar-raiser</b> round'),
+      ]},
+      {name:'Applications + Negotiation + Book Mocks', color:'yellow', time:'40 min', tasks:[
+        t('Push a <b>broad application wave</b> (both resumes final, 3 projects live), still routing through referrals where possible'),
+        t('Firm up <b>negotiation</b>: target per level (levels.fyi), walk-away, the "competing offers" script'),
+        t('Book your <b>final 1–2 mock interviews</b> (ideally full loops) for the next two days'),
+      ]},
+      cLog([ r('Total applications out: ___ | recruiter/phone screens scheduled: ___ | STAR→LP gaps: ___') ]),
+    ]),
+    day(44,'2026-09-08','Tue Sep 8','FULL-LOOP MOCK #1','Real onsite sim: coding + ML/GenAI design + LP behavioral + FDE build',[
+      {name:'Full Onsite Simulation (back-to-back, no breaks)', color:'coding', time:'4–5 hr', tasks:[
+        t('Round 1 — <b>Coding</b> (45 min): 1 medium-hard, narrate aloud, no notes'),
+        t('Round 2 — <b>ML/GenAI System Design</b> (45 min): a design you have not drilled — full framework + estimation'),
+        t('Round 3 — <b>Amazon-style LP Behavioral</b> (45 min): 3 stories, expect deep "dive deep" follow-ups'),
+        t('Round 4 — <b>FDE Build Challenge</b> (60–90 min): fresh ambiguous prompt → working v0 + 5-min demo pitch, defending scope cuts'),
+        t('Debrief every round honestly — score 1–4, note the exact moment you stalled'),
+      ]},
+      cLog([ r('Weakest round + the ONE fix for tomorrow: ___') ]),
+    ]),
+    day(45,'2026-09-09','Wed Sep 9','FULL-LOOP MOCK #2 + Wrap','Beat Mock #1; then keep the pipeline running',[
+      {name:'Full Onsite Simulation #2', color:'coding', time:'4–5 hr', tasks:[
+        t('Repeat the 4-round loop with fresh problems; target a visible improvement over Mock #1 on your weakest round'),
+        t('Final debrief: score each round 1–4 — aim for the "hire" bar on at least 3 of 4'),
+      ]},
+      {name:'Wrap + Keep Going', color:'retro', time:'20 min', tasks:[
+        r('Interview-ready per round (coding / design / behavioral / FDE build): ___ / ___ / ___ / ___'),
+        r('3 projects shipped: two-stage recsys+serving · LLM gateway+RAG · research paper — + FDE build reps done. All live with resume bullets? (Y/N)'),
+        r('The course ends here — the JOB SEARCH does not: keep applying weekly, keep mocking, keep the STAR bank sharp until offers land.'),
+        r('Confidence /10: ___ — you built a 3-project portfolio, drilled the FDE muscle, AND ran the pipeline in parallel. Now go get the offer.'),
+      ]},
+    ]),
+  ];
+
+  return phases;
+}
+
+function render() {
+  renderPhaseTabs();
+  renderDays();
+  updateStats();
+}
+
+function renderPhaseTabs() {
+  const c = document.getElementById('phaseTabs');
+  c.innerHTML = '<div class="phase-tab active" data-phase="all">All Days</div>';
+  DATA.forEach(p => {
+    const total = countPhaseTasks(p);
+    const done = countPhaseCompleted(p);
+    const pct = total ? Math.round(done/total*100) : 0;
+    c.innerHTML += `<div class="phase-tab" data-phase="${p.id}">${p.name.split(':')[0]}<span class="tab-progress">${pct}%</span></div>`;
+  });
+  c.querySelectorAll('.phase-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      c.querySelectorAll('.phase-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      filterPhase(tab.dataset.phase);
+    });
+  });
+}
+
+function filterPhase(phaseId) {
+  document.querySelectorAll('.day-card').forEach(card => {
+    if (phaseId === 'all') { card.classList.remove('hidden'); return; }
+    card.classList.toggle('hidden', card.dataset.phase !== phaseId);
+  });
+}
+
+function renderDays() {
+  const container = document.getElementById('daysContainer');
+  const searchVal = (document.getElementById('searchInput').value||'').toLowerCase();
+  container.innerHTML = '';
+  DATA.forEach(phase => {
+    phase.days.forEach(day => {
+      const dayId = `day${day.day}`;
+      const tasks = getAllTasks(day);
+      const total = tasks.length;
+      const done = tasks.filter((_,i) => state.checked[`${dayId}_${i}`]).length;
+      const pct = total ? Math.round(done/total*100) : 0;
+      const isComplete = done === total && total > 0;
+      const isToday = day.iso === isoToday();
+      const isOpen = (`open_${dayId}` in state) ? state[`open_${dayId}`] : isToday;
+
+      if (searchVal) {
+        const hasMatch = day.title.toLowerCase().includes(searchVal) ||
+          day.subtitle.toLowerCase().includes(searchVal) ||
+          tasks.some(t => t.t.replace(/<[^>]*>/g,'').toLowerCase().includes(searchVal));
+        if (!hasMatch) return;
+      }
+
+      const card = document.createElement('div');
+      card.className = `day-card${isComplete?' completed':''}${isOpen?' open':''}${isToday?' today':''}${day.rest?' rest':''}`;
+      card.dataset.phase = phase.id;
+      card.dataset.day = dayId;
+
+      card.innerHTML = `
+        <div class="day-header" data-day="${dayId}">
+          <div class="day-header-left">
+            <div class="day-number">${day.badge || day.day}</div>
+            <div class="day-title-area">
+              <div class="day-title">${day.title}${isToday?' <span class="today-badge">TODAY</span>':''}${day.rest?' <span class="rest-badge">REST</span>':''}</div>
+              <div class="day-subtitle">${day.subtitle}</div>
+            </div>
+          </div>
+          <div class="day-header-right">
+            <div class="day-progress-mini"><div class="day-progress-mini-fill" style="width:${pct}%"></div></div>
+            <div class="day-progress-label">${done}/${total}</div>
+            <div class="chevron">&#9660;</div>
+          </div>
+        </div>
+        <div class="day-body">${renderCategories(day, dayId)}</div>
+      `;
+      container.appendChild(card);
+    });
+  });
+
+  document.querySelectorAll('.day-header').forEach(h => {
+    h.addEventListener('click', () => {
+      const card = h.closest('.day-card');
+      card.classList.toggle('open');
+      state[`open_${h.dataset.day}`] = card.classList.contains('open');
+      saveState();
+    });
+  });
+
+  document.querySelectorAll('.task').forEach(task => {
+    task.addEventListener('click', (e) => {
+      if (e.target.tagName === 'TEXTAREA') return;
+      const id = task.dataset.id;
+      state.checked[id] = !state.checked[id];
+      task.classList.toggle('checked', state.checked[id]);
+      saveState();
+      updateStats();
+      renderPhaseTabs();
+      const card = task.closest('.day-card');
+      const dayId = card.dataset.day;
+      const dayData = findDay(dayId);
+      if (dayData) {
+        const tasks = getAllTasks(dayData);
+        const done = tasks.filter((_,i) => state.checked[`${dayId}_${i}`]).length;
+        const total = tasks.length;
+        card.classList.toggle('completed', done === total);
+        card.querySelector('.day-number').className = 'day-number';
+        if (done === total) card.querySelector('.day-number').style.background = 'var(--green)';
+        else card.querySelector('.day-number').style.background = '';
+        const pct = total ? Math.round(done/total*100) : 0;
+        card.querySelector('.day-progress-mini-fill').style.width = pct+'%';
+        card.querySelector('.day-progress-label').textContent = `${done}/${total}`;
+      }
+      if (state.checked[id]) showToast('Task completed!');
+    });
+  });
+
+  document.querySelectorAll('.retro-textarea').forEach(ta => {
+    ta.addEventListener('input', () => {
+      state.notes[ta.dataset.id] = ta.value;
+      saveState();
+    });
+  });
+}
+
+function renderCategories(day, dayId) {
+  let html = '';
+  let taskIdx = 0;
+  day.categories.forEach(cat => {
+    const catTasks = cat.tasks;
+    const catDone = catTasks.filter((_,i) => state.checked[`${dayId}_${taskIdx+i}`]).length;
+    html += `<div class="category">
+      <div class="category-header">
+        <div class="category-dot" style="background:var(--${cat.color})"></div>
+        <div class="category-name">${cat.name}</div>
+        <div class="category-time">${cat.time}</div>
+        <div class="category-progress-text">${catDone}/${catTasks.length}</div>
+      </div>`;
+    catTasks.forEach(task => {
+      const tid = `${dayId}_${taskIdx}`;
+      const checked = state.checked[tid];
+      html += `<div class="task${task.sub?' subtask':''}${checked?' checked':''}" data-id="${tid}">
+        <div class="checkmark"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="task-text">${task.t}</div>
+      </div>`;
+      if (task.retro) {
+        html += `<textarea class="retro-textarea" data-id="note_${tid}" placeholder="Write your notes here...">${state.notes[`note_${tid}`]||''}</textarea>`;
+      }
+      taskIdx++;
+    });
+    html += '</div>';
+  });
+  return html;
+}
+
+function getAllTasks(day) {
+  const tasks = [];
+  day.categories.forEach(cat => cat.tasks.forEach(t => tasks.push(t)));
+  return tasks;
+}
+
+function findDay(dayId) {
+  const num = parseInt(dayId.replace('day',''));
+  for (const p of DATA) for (const d of p.days) if (d.day === num) return d;
+  return null;
+}
+
+function countPhaseTasks(phase) {
+  let n = 0;
+  phase.days.forEach(d => d.categories.forEach(c => n += c.tasks.length));
+  return n;
+}
+
+function countPhaseCompleted(phase) {
+  let n = 0;
+  phase.days.forEach(d => {
+    let idx = 0;
+    d.categories.forEach(c => c.tasks.forEach(() => {
+      if (state.checked[`day${d.day}_${idx}`]) n++;
+      idx++;
+    }));
+  });
+  return n;
+}
+
+function updateStats() {
+  let total = 0, done = 0, daysComplete = 0, lcDone = 0;
+  DATA.forEach(phase => {
+    phase.days.forEach(day => {
+      let dayTotal = 0, dayDone = 0, idx = 0;
+      day.categories.forEach(cat => cat.tasks.forEach(task => {
+        total++; dayTotal++;
+        const tid = `day${day.day}_${idx}`;
+        if (state.checked[tid]) { done++; dayDone++; if(task.lc) lcDone++; }
+        idx++;
+      }));
+      if (dayDone === dayTotal && dayTotal > 0 && !day.rest) daysComplete++;
+    });
+  });
+  document.getElementById('statCompleted').textContent = done;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDaysCompleted').textContent = daysComplete;
+  document.getElementById('statProblems').textContent = lcDone;
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('overallBar').style.width = Math.max(pct, 3)+'%';
+  document.getElementById('overallBarText').textContent = pct+'%';
+
+  // Streak
+  const totalPlanDays = Math.max(...allDays().filter(d => !d.rest).map(d => d.day));
+  let streak = 0;
+  for (let d = 1; d <= totalPlanDays; d++) {
+    const day = findDay(`day${d}`);
+    if (!day) break;
+    const tasks = getAllTasks(day);
+    const dayDone = tasks.filter((_,i) => state.checked[`day${d}_${i}`]).length;
+    if (dayDone > 0) streak = d; else if (d > 1 && streak < d-1) break;
+  }
+  document.getElementById('streakText').textContent = `Day ${Math.min(streak,totalPlanDays)} of ${totalPlanDays}`;
+  const streakPct = Math.round(streak/totalPlanDays*100);
+  document.getElementById('streakSub').textContent = streak === 0 ? 'Start checking off tasks to build your streak' :
+    streak >= totalPlanDays ? 'You completed the entire plan!' : `${streakPct}% of the journey complete — keep going!`;
+  // ISO-based "today" label, with rest-day awareness
+  const iso = isoToday();
+  const tc = todayCard();
+  const b = planBounds();
+  let todayLabel;
+  if (tc && tc.rest) todayLabel = '🌿 Rest Day — recover';
+  else if (tc) todayLabel = 'Today = ' + tc.date + ' (Day ' + tc.day + ')';
+  else if (iso < b.first) todayLabel = 'Plan starts ' + b.first;
+  else if (iso > b.last) todayLabel = '🎉 Plan complete';
+  else todayLabel = '🌿 Rest Day — recover';
+  document.getElementById('streakDate').textContent = todayLabel + ' · ' + new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// Toolbar events
+document.getElementById('searchInput').addEventListener('input', () => renderDays());
+document.getElementById('expandAllBtn').addEventListener('click', () => {
+  document.querySelectorAll('.day-card').forEach(c => { c.classList.add('open'); state[`open_${c.dataset.day}`] = true; });
+  saveState();
+});
+document.getElementById('collapseAllBtn').addEventListener('click', () => {
+  document.querySelectorAll('.day-card').forEach(c => { c.classList.remove('open'); state[`open_${c.dataset.day}`] = false; });
+  saveState();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (confirm('Reset ALL progress? This cannot be undone.')) {
+    state = { checked: {}, notes: {} };
+    saveState();
+    render();
+    showToast('Progress reset');
+  }
+});
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `google_prep_progress_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('Progress exported!');
+});
+
+// Import button
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (imported && imported.checked) {
+        state = imported;
+        saveState();
+        render();
+        showToast('Progress imported successfully!');
+      } else {
+        alert('Invalid file format. Expected a JSON file exported from this tracker.');
+      }
+    } catch { alert('Could not parse file. Make sure it\'s a valid JSON export.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// File:// warning
+document.getElementById('serverCmd').addEventListener('click', () => {
+  navigator.clipboard.writeText('cd "' + location.href.replace('file://','').replace('/tracker.html','') + '" && python3 -m http.server 3000').then(() => showToast('Command copied!')).catch(() => {});
+});
+document.getElementById('dismissWarning').addEventListener('click', () => {
+  document.getElementById('fileWarning').style.display = 'none';
+  try { localStorage.setItem('dismiss_file_warn', '1'); } catch {}
+});
+
+// Init (async — wait for IndexedDB)
+(async () => {
+  state = await loadState();
+  render();
+  // Scroll today's card into view (if today is within the plan window)
+  if (todayCard()) {
+    const el = document.querySelector('.day-card.today');
+    if (el) setTimeout(() => el.scrollIntoView({behavior:'smooth', block:'center'}), 200);
+  }
+  // Show file:// warning if needed
+  if (location.protocol === 'file:') {
+    const dismissed = localStorage.getItem('dismiss_file_warn');
+    if (!dismissed) document.getElementById('fileWarning').style.display = 'flex';
+  }
+})();
+</script>
+</body>
+</html>

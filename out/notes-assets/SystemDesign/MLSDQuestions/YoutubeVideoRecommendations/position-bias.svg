@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="470" viewBox="0 0 860 470" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .ptitle{font-size:11px;font-weight:700;letter-spacing:.09em}
+    .bl{font-size:11.5px;font-weight:600;fill:#3a3a3a}
+    .bs{font-size:10.5px;fill:#6b6b6b}
+    .item{font-size:11.5px;fill:#3a3a3a}
+    .small{font-size:11px;fill:#6b6b6b}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="469" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">Position bias, and the side tower that removes it</text>
+  <text class="sub" x="28" y="58">The labels are contaminated before the model ever sees them, so I give the model a place to put the contamination.</text>
+
+  <text class="small" x="40" y="86">clicks by slot, all videos pooled</text>
+  <g fill="#c8c6be">
+    <rect x="40"  y="90"  width="26" height="60"/>
+    <rect x="80"  y="106" width="26" height="44"/>
+    <rect x="120" y="117" width="26" height="33"/>
+    <rect x="160" y="125" width="26" height="25"/>
+    <rect x="200" y="131" width="26" height="19"/>
+    <rect x="240" y="135" width="26" height="15"/>
+    <rect x="280" y="138" width="26" height="12"/>
+    <rect x="320" y="140" width="26" height="10"/>
+  </g>
+  <rect x="40" y="90" width="26" height="60" fill="#d93025"/>
+  <line x1="34" y1="150" x2="352" y2="150" stroke="#b8b6ad"/>
+  <g class="small" text-anchor="middle" fill="#8a8a80">
+    <text x="53" y="165">1</text><text x="93" y="165">2</text><text x="133" y="165">3</text><text x="173" y="165">4</text>
+    <text x="213" y="165">5</text><text x="253" y="165">6</text><text x="293" y="165">7</text><text x="333" y="165">8</text>
+  </g>
+
+  <text class="item" x="384" y="102">Slot 1 collects several times the clicks of slot 5 — before anyone looks at</text>
+  <text class="item" x="384" y="120">what the videos are. Train on raw clicks and the model happily learns</text>
+  <text class="item" x="384" y="138">“things at the top are good,” which is circular: it was at the top because</text>
+  <text class="item" x="384" y="156">yesterday's model already liked it. The bias compounds every retrain.</text>
+
+  <rect x="28" y="188" width="402" height="238" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="454" y="188" width="378" height="238" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <text class="ptitle" x="46" y="212" fill="#1a73e8">TRAINING</text>
+  <text class="ptitle" x="472" y="212" fill="#1e8e3e">SERVING</text>
+
+  <!-- training -->
+  <rect x="48" y="226" width="200" height="62" rx="7" fill="#e8f0fe" stroke="#a8c7f5"/>
+  <text class="bl" x="148" y="250" text-anchor="middle" fill="#1a4fa0">main network</text>
+  <text class="bs" x="148" y="268" text-anchor="middle">user × video cross features</text>
+
+  <rect x="268" y="226" width="144" height="46" rx="7" fill="#fef7e0" stroke="#e5cf94"/>
+  <text class="bl" x="340" y="246" text-anchor="middle" fill="#8a5400">position tower</text>
+  <text class="bs" x="340" y="263" text-anchor="middle">slot · device · surface</text>
+
+  <g stroke="#b8b6ad" stroke-width="1.5" fill="none">
+    <path d="M148 288 v22 h58" marker-end="url(#pm)"/>
+    <path d="M340 272 v38 h-58" marker-end="url(#pm)"/>
+    <path d="M229 334 v22" marker-end="url(#pm)"/>
+  </g>
+  <defs>
+    <marker id="pm" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#b8b6ad"/></marker>
+  </defs>
+  <circle cx="229" cy="318" r="15" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+  <text x="229" y="324" text-anchor="middle" font-size="17px" fill="#3a3a3a">+</text>
+
+  <rect x="119" y="358" width="220" height="46" rx="7" fill="#f7f6f2" stroke="#d8d6ce"/>
+  <text class="bl" x="229" y="378" text-anchor="middle">σ( logit ) → cross-entropy</text>
+  <text class="bs" x="229" y="395" text-anchor="middle">against the observed click</text>
+
+  <!-- serving -->
+  <rect x="474" y="226" width="200" height="62" rx="7" fill="#e8f0fe" stroke="#a8c7f5"/>
+  <text class="bl" x="574" y="250" text-anchor="middle" fill="#1a4fa0">main network</text>
+  <text class="bs" x="574" y="268" text-anchor="middle">same weights, unchanged</text>
+
+  <rect x="694" y="226" width="120" height="46" rx="7" fill="#f4f3ef" stroke="#c8c6be" stroke-dasharray="4 3"/>
+  <text class="bl" x="754" y="246" text-anchor="middle" fill="#a0a0a0">position tower</text>
+  <text class="bs" x="754" y="263" text-anchor="middle" fill="#a0a0a0">dropped</text>
+  <line x1="700" y1="268" x2="808" y2="230" stroke="#d93025" stroke-width="1.6" opacity=".8"/>
+
+  <g stroke="#b8b6ad" stroke-width="1.5" fill="none">
+    <path d="M574 288 v68" marker-end="url(#pm)"/>
+  </g>
+  <rect x="464" y="358" width="220" height="46" rx="7" fill="#e6f4ea" stroke="#a5d6b6"/>
+  <text class="bl" x="574" y="378" text-anchor="middle" fill="#137333">rank on relevance alone</text>
+  <text class="bs" x="574" y="395" text-anchor="middle">position is the output, not an input</text>
+
+  <text class="item" x="28" y="446">The two towers are summed <tspan font-weight="700">before</tspan> the sigmoid. That makes the position tower the cheapest available explanation for the slot effect,</text>
+  <text class="item" x="28" y="462">so gradient descent hands it that job — and the main tower is left explaining only the residual, which is relevance.</text>
+</svg>

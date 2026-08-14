@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="430" viewBox="0 0 860 430" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .eyebrow{font-size:10px;font-weight:700;letter-spacing:.09em}
+    .bt{font-size:13px;font-weight:700;fill:#1a1a1a}
+    .lbl{font-size:9.5px;font-weight:700;letter-spacing:.08em;fill:#a5a39a}
+    .item{font-size:11px;fill:#3a3a3a}
+    .blind{font-size:11px;fill:#a5261c}
+    .small{font-size:11px;fill:#6b6b6b}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="429" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">Three gates, and what each one cannot see</text>
+  <text class="sub" x="28" y="58">Offline metrics decide what is worth testing. They never decide what ships.</text>
+
+  <rect x="28" y="88" width="252" height="216" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="28" y="88" width="252" height="4" rx="2" fill="#9aa0a6"/>
+  <text class="eyebrow" x="46" y="114" fill="#5f6368">GATE 1 · MINUTES</text>
+  <text class="bt" x="46" y="136">Offline, on logged data</text>
+  <text class="lbl" x="46" y="162">MEASURES</text>
+  <text class="item" x="46" y="182">retrieval: recall@1000 — was the</text>
+  <text class="item" x="46" y="198">video they watched even in the set?</text>
+  <text class="item" x="46" y="218">ranking: AUC, NDCG, and calibration</text>
+  <text class="item" x="46" y="234">error, which people forget to check</text>
+  <text class="lbl" x="46" y="262">BLIND TO</text>
+  <text class="blind" x="46" y="282">that a new model changes which</text>
+  <text class="blind" x="46" y="298">videos get shown in the first place</text>
+
+  <rect x="304" y="88" width="252" height="216" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="304" y="88" width="252" height="4" rx="2" fill="#1a73e8"/>
+  <text class="eyebrow" x="322" y="114" fill="#1a73e8">GATE 2 · WEEKS</text>
+  <text class="bt" x="322" y="136">Online A/B, 1% → 10%</text>
+  <text class="lbl" x="322" y="162">MEASURES</text>
+  <text class="item" x="322" y="182">watch time per user, sessions per</text>
+  <text class="item" x="322" y="198">user, D1 and D7 return rate</text>
+  <text class="item" x="322" y="218">plus every guardrail below, any one</text>
+  <text class="item" x="322" y="234">of which can veto a win</text>
+  <text class="lbl" x="322" y="262">BLIND TO</text>
+  <text class="blind" x="322" y="282">slow damage — a clickbait model</text>
+  <text class="blind" x="322" y="298">looks excellent for about a week</text>
+
+  <rect x="580" y="88" width="252" height="216" rx="9" fill="#ffffff" stroke="#e2e0d9"/>
+  <rect x="580" y="88" width="252" height="4" rx="2" fill="#1e8e3e"/>
+  <text class="eyebrow" x="598" y="114" fill="#1e8e3e">GATE 3 · MONTHS</text>
+  <text class="bt" x="598" y="136">Long-run holdback</text>
+  <text class="lbl" x="598" y="162">MEASURES</text>
+  <text class="item" x="598" y="182">a permanent ~0.1% cell that never</text>
+  <text class="item" x="598" y="198">receives the new stack at all</text>
+  <text class="item" x="598" y="218">read quarterly: does the sum of a</text>
+  <text class="item" x="598" y="234">year of “wins” actually add up?</text>
+  <text class="lbl" x="598" y="262">BLIND TO</text>
+  <text class="blind" x="598" y="282">very little — it is simply slow and</text>
+  <text class="blind" x="598" y="298">expensive, so you get exactly one</text>
+
+  <g stroke="#c9c7bf" stroke-width="1.8" fill="none">
+    <path d="M282 196 h18" marker-end="url(#e)"/>
+    <path d="M558 196 h18" marker-end="url(#e)"/>
+  </g>
+  <defs>
+    <marker id="e" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#c9c7bf"/></marker>
+  </defs>
+
+  <rect x="28" y="326" width="804" height="82" rx="9" fill="#fef7e0" stroke="#e5cf94"/>
+  <text class="eyebrow" x="46" y="350" fill="#8a5400">GUARDRAILS THAT CAN OVERRULE A WIN ON WATCH TIME</text>
+  <text class="item" x="46" y="372">“not interested” and report rate  ·  share of watch time captured by the top 1% of channels  ·  unique creators per session</text>
+  <text class="item" x="46" y="392">fraction of this week's uploads that got at least one impression  ·  long-form vs short-form mix  ·  p99 latency and error rate</text>
+</svg>

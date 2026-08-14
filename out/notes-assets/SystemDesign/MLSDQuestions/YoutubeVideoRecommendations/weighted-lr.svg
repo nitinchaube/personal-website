@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="380" viewBox="0 0 860 380" role="img">
+  <style>
+    text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#222}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .h1{font-size:17px;font-weight:700;fill:#151515}
+    .sub{font-size:12.5px;fill:#6b6b6b}
+    .bt{font-size:12.5px;font-weight:700;fill:#1a1a1a}
+    .item{font-size:11.5px;fill:#3a3a3a}
+    .small{font-size:11px;fill:#6b6b6b}
+    .f{font-size:13.5px;fill:#1a1a1a}
+    .big{font-size:17px;font-weight:700;fill:#137333}
+  </style>
+  <rect x="0.5" y="0.5" width="859" height="379" rx="10" fill="#fbfaf6" stroke="#e6e4dd"/>
+
+  <text class="h1" x="28" y="36">Predicting watch time without regressing on watch time</text>
+  <text class="sub" x="28" y="58">Most impressions have a watch time of exactly zero, which makes it a miserable regression target. So I don't regress on it.</text>
+
+  <text class="small" x="48" y="92">10 impressions of one video</text>
+  <g>
+    <rect x="48" y="100" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="113">w = 1</text>
+    <rect x="48" y="122" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="135">w = 1</text>
+    <rect x="48" y="144" width="110" height="18" rx="3" fill="#1e8e3e"/><text class="small mono" x="166" y="157" fill="#137333">w = 180 s</text>
+    <rect x="48" y="166" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="179">w = 1</text>
+    <rect x="48" y="188" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="201">w = 1</text>
+    <rect x="48" y="210" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="223">w = 1</text>
+    <rect x="48" y="232" width="110" height="18" rx="3" fill="#1e8e3e"/><text class="small mono" x="166" y="245" fill="#137333">w = 40 s</text>
+    <rect x="48" y="254" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="267">w = 1</text>
+    <rect x="48" y="276" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="289">w = 1</text>
+    <rect x="48" y="298" width="110" height="18" rx="3" fill="#e0ded6"/><text class="small mono" x="166" y="311">w = 1</text>
+  </g>
+  <text class="small" x="48" y="336">green = clicked, weighted by seconds watched</text>
+  <text class="small" x="48" y="352">grey = shown and ignored, weight 1</text>
+
+  <rect x="300" y="88" width="532" height="152" rx="8" fill="#ffffff" stroke="#e2e0d9"/>
+  <text class="bt" x="320" y="112">Train an ordinary logistic regression — just with those weights</text>
+  <text class="item" x="320" y="136">A logistic model converges to the odds of the data it was fed. With weights, “the data”</text>
+  <text class="item" x="320" y="154">means the weighted counts:</text>
+  <text class="f mono" x="320" y="184">odds  =  Σ positive weights ⁄ Σ negative weights  =  (180 + 40) ⁄ 8  =  27.5</text>
+  <text class="item" x="320" y="212">And the quantity I actually wanted, averaged over every impression including the misses:</text>
+  <text class="f mono" x="320" y="232">E[watch per impression]  =  220 ⁄ 10  =  22</text>
+
+  <rect x="300" y="256" width="532" height="96" rx="8" fill="#e6f4ea" stroke="#a5d6b6"/>
+  <text class="item" x="320" y="280">Those two numbers are close, and they converge as clicks get rarer: the denominators are</text>
+  <text class="item" x="320" y="298">N − k and N, and k ≪ N on a real feed. So the odds <tspan font-style="italic">are</tspan> the expected watch time.</text>
+  <text class="big mono" x="566" y="332" text-anchor="middle">at serving:   e^logit  ≈  E[watch time]</text>
+</svg>
