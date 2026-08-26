@@ -1,7 +1,7 @@
 ---
 title: "Graphs"
 date: 2026-08-18
-summary: "Graph types, degree rules, and adjacency matrix vs adjacency list representations."
+summary: "Graph types, representations, connected components, BFS/DFS, and starter problems (Provinces, Islands, Flood Fill, Rotting Oranges)."
 tags: [Graphs, DSA, Algorithms]
 ---
 
@@ -238,3 +238,221 @@ def dfs_recursive(adj, src, visited=None):
 | edge weights only 0 or 1                               | **0-1 BFS** with deque (push front for 0, back for 1) |
 
 **Grid as graph:** cell `(r, c)` is a node, 4/8 neighbors are edges. BFS/DFS templates are identical; the neighbor loop walks directions instead of `adj[node]`.
+
+---
+
+# BFS and DFS Patterns:
+
+### Problem 1: Number of Provinces ([LC 547](https://leetcode.com/problems/number-of-provinces/))
+
+`isConnected` is an adjacency matrix: `isConnected[i][j] == 1` means cities `i` and `j` are directly linked. Count connected components (provinces).
+
+```
+isConnected =
+  0 1 2
+0 1 1 0
+1 1 1 0
+2 0 0 1
+
+  0       1          2
+  province A    province B   → answer = 2
+```
+
+- Pattern: connected components on a matrix graph (not an edge list).
+- Outer loop over all cities; start a DFS/BFS only when unvisited; each start = one province.
+- Neighbors of `i` = every `j` where `isConnected[i][j] == 1` (skip `j == i`).
+- Time `O(n^2)`, space `O(n)` for `visited`. Matrix is dense, so scanning all columns per city is fine.
+
+```python
+from typing import List
+
+class Solution:
+    def findCircleNum(self, isConnected: List[List[int]]) -> int:
+        n = len(isConnected)
+        visited = set()
+        result = 0
+
+        def dfs(i):
+            visited.add(i)
+            # matrix graph: scan all columns to find neighbors of city i
+            for neigh in range(n):
+                if isConnected[i][neigh] == 1 and neigh not in visited:
+                    dfs(neigh)
+
+        # each unvisited start = one new province
+        for i in range(n):
+            if i not in visited:
+                result += 1
+                dfs(i)
+        return result
+```
+
+### Problem 2: Number of Islands ([LC 200](https://leetcode.com/problems/number-of-islands/))
+
+Grid of `"1"` (land) and `"0"` (water). An island is a max connected group of land cells (4-directional). Count islands.
+
+```
+  1 1 0 0 0
+  1 1 0 0 0
+  0 0 1 0 0
+  0 0 0 1 1
+
+  island A (top-left)   island B (middle)   island C (bottom-right)
+  answer = 3
+```
+
+- Pattern: connected components on a **grid** (implicit graph).
+- Outer loop over every cell; when you see land, flood-fill the whole island, then `count += 1`.
+- Neighbors = 4 directions `(±1, 0)`, `(0, ±1)`. Mark visited by flipping `"1"` → `"0"` (or use a `visited` set).
+- BFS or DFS both work. Time `O(m * n)`, space `O(m * n)` worst case (queue/stack).
+
+**BFS**
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def numIslands(self, grid: List[List[str]]) -> int:
+        m, n = len(grid), len(grid[0])
+        res = 0
+        dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        def bfs(row, col):
+            q = deque([(row, col)])
+            grid[row][col] = "0"
+            while q:
+                r, c = q.popleft()
+                for dr, dc in dirs:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < m and 0 <= nc < n and grid[nr][nc] == "1":
+                        grid[nr][nc] = "0"
+                        q.append((nr, nc))
+
+        for i in range(m):
+            for j in range(n):
+                if grid[i][j] == "1":
+                    bfs(i, j)
+                    res += 1
+        return res
+```
+
+**DFS**
+
+```python
+from typing import List
+
+class Solution:
+    def numIslands(self, grid: List[List[str]]) -> int:
+        m, n = len(grid), len(grid[0])
+        count = 0
+
+        def dfs(i, j):
+            if i < 0 or j < 0 or i >= m or j >= n or grid[i][j] == "0":
+                return
+            grid[i][j] = "0"
+            dfs(i + 1, j)
+            dfs(i - 1, j)
+            dfs(i, j + 1)
+            dfs(i, j - 1)
+
+        for i in range(m):
+            for j in range(n):
+                if grid[i][j] == "1":
+                    count += 1
+                    dfs(i, j)
+        return count
+```
+
+**Same pattern, different graph:** Provinces = components on an adjacency matrix. Islands = components on a grid. Both are "loop all nodes → traverse if unvisited → count starts."
+
+### Problem 3: Flood Fill ([LC 733](https://leetcode.com/problems/flood-fill/))
+
+Start at `(sr, sc)`. Recolor every 4-connected cell that shares the **original** color with the start cell to `color`. Return the modified image.
+
+```
+image, start (1,1), color = 2
+
+  before          after
+  1 1 1           2 2 2
+  1 1 0    →      2 2 0
+  1 0 1           2 0 1
+
+  only cells matching start color 1 get recolored
+```
+
+- Pattern: DFS/BFS flood from **one** seed cell (not a count-all-components loop).
+- Capture `ic = image[sr][sc]` first. Recolor only cells equal to `ic`.
+- Early return if `ic == color` (already filled). Without this, DFS never terminates: every neighbor still "matches" and you recurse forever.
+- Time `O(m * n)`, space `O(m * n)` recursion/queue worst case.
+
+```python
+from typing import List
+
+class Solution:
+    def floodFill(self, image: List[List[int]], sr: int, sc: int, color: int) -> List[List[int]]:
+        m, n = len(image), len(image[0])
+        ic = image[sr][sc]
+        if ic == color:  # already filled → avoid infinite recursion
+            return image
+
+        def dfs(i, j):
+            if i < 0 or j < 0 or i >= m or j >= n or image[i][j] != ic:
+                return
+            image[i][j] = color
+            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                dfs(i + dr, j + dc)
+
+        dfs(sr, sc)
+        return image
+```
+
+### Problem 4: Rotting Oranges ([LC 994](https://leetcode.com/problems/rotting-oranges/))
+
+Grid cells: `0` empty, `1` fresh, `2` rotten. Every minute, any fresh orange 4-adjacent to a rotten one becomes rotten. Return minutes until all are rotten, or `-1` if impossible.
+
+```
+minute 0          minute 1          minute 2
+  2 1 1             2 2 1             2 2 2
+  1 1 0      →      2 1 0      →      2 2 0
+  0 1 1             0 1 1             0 2 1  ... → answer = 4
+```
+
+- Pattern: **multi-source BFS**. Seed the queue with **all** initially rotten cells at time `0`.
+- Track `fresh` count. Each time you rot a fresh orange, decrement it.
+- Answer is the max time on the queue. If `fresh > 0` when BFS ends, return `-1`.
+- Mark rotten **before** enqueue (same as Islands) so a cell is not queued twice.
+- Time `O(m * n)`, space `O(m * n)`.
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def orangesRotting(self, grid: List[List[int]]) -> int:
+        m, n = len(grid), len(grid[0])
+        fresh = 0
+        q = deque()  # (r, c, time)
+
+        # seed all rotten oranges at time 0; count fresh
+        for i in range(m):
+            for j in range(n):
+                if grid[i][j] == 1:
+                    fresh += 1
+                elif grid[i][j] == 2:
+                    q.append((i, j, 0))
+
+        res = 0
+        dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        while q:
+            r, c, time = q.popleft()
+            res = time
+            for dr, dc in dirs:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < m and 0 <= nc < n and grid[nr][nc] == 1:
+                    grid[nr][nc] = 2  # rot + mark visited
+                    fresh -= 1
+                    q.append((nr, nc, time + 1))
+
+        return -1 if fresh > 0 else res
+```
