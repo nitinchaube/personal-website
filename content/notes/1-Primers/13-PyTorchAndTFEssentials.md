@@ -28,6 +28,87 @@ One mental model before anything else. PyTorch is imperative and eager, so your 
 
 ---
 
+# TL;DR: a whole model, start to finish
+
+If you only read one thing, read this. Both columns do the exact same job in the exact same order: build data, build model, train, run inference, save, reload. Everything else in this note is detail hanging off these six steps.
+
+```
+   THE LIFECYCLE (same for both)
+
+   data  ->  model  ->  train loop  ->  inference  ->  save  ->  load
+   §18       §10        §16            §9 (eval)      §19       §19
+```
+
+```python
+# ============================ PyTorch ============================
+import torch, torch.nn as nn
+from torch.utils.data import TensorDataset, DataLoader
+
+dev = "cuda" if torch.cuda.is_available() else "cpu"
+
+# 1. DATA
+X, y = torch.randn(1000, 20), torch.randint(0, 3, (1000,))
+loader = DataLoader(TensorDataset(X, y), batch_size=64, shuffle=True)
+
+# 2. MODEL
+model = nn.Sequential(nn.Linear(20, 64), nn.ReLU(), nn.Linear(64, 3)).to(dev)
+opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+loss_fn = nn.CrossEntropyLoss()
+
+# 3. TRAIN
+model.train()
+for epoch in range(10):
+    for xb, yb in loader:
+        xb, yb = xb.to(dev), yb.to(dev)
+        opt.zero_grad()                 # clear old grads
+        loss = loss_fn(model(xb), yb)   # forward + loss
+        loss.backward()                 # backprop
+        opt.step()                      # update weights
+
+# 4. INFERENCE
+model.eval()
+with torch.no_grad():
+    preds = model(X.to(dev)).argmax(1)
+
+# 5. SAVE   and   6. LOAD
+torch.save(model.state_dict(), "model.pt")
+model.load_state_dict(torch.load("model.pt", map_location=dev))
+```
+
+```python
+# ========================== TensorFlow ==========================
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+# 1. DATA
+X = tf.random.normal((1000, 20))
+y = tf.random.uniform((1000,), 0, 3, tf.int32)
+
+# 2. MODEL
+model = keras.Sequential([
+    layers.Dense(64, activation="relu", input_shape=(20,)),
+    layers.Dense(3),
+])
+model.compile(optimizer=keras.optimizers.AdamW(1e-3),
+              loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+              metrics=["accuracy"])
+
+# 3. TRAIN  (fit hides the loop above)
+model.fit(X, y, batch_size=64, epochs=10, verbose=2)
+
+# 4. INFERENCE
+preds = model.predict(X).argmax(1)
+
+# 5. SAVE   and   6. LOAD
+model.save("model.keras")
+model = keras.models.load_model("model.keras")
+```
+
+Read the PyTorch training block top to bottom and you see the machinery. Read the Keras one and `fit` swallows it. That single trade, explicit loop versus `fit`, is the whole personality difference between the two.
+
+---
+
 # 1. Install and sanity check
 
 ```python
@@ -295,6 +376,27 @@ with torch.no_grad():
 ```
 
 Trick: `model.eval()` and `model.train()` are not about gradients, they flip the behavior of dropout and batchnorm. Correct fast inference in PyTorch needs both `model.eval()` and `torch.no_grad()`. Keras handles this through the `training=True/False` flag it passes to layers inside `fit` and `predict`.
+
+## `no_grad` vs `inference_mode`
+
+`torch.inference_mode()` (PyTorch 1.9+) is a stronger, faster `no_grad`. Both switch off gradient tracking, but `inference_mode` also drops the version-counting and view bookkeeping that autograd normally keeps on every tensor, so ops and allocations are a little cheaper.
+
+```python
+model.eval()
+with torch.inference_mode():      # prefer this for pure inference loops
+    preds = model(x)
+```
+
+The catch: tensors created inside an `inference_mode` block are marked as "inference tensors" and error out if you later feed them into anything differentiable (re-attach them to a training graph, call `requires_grad_(True)`, and so on). `no_grad` has no such restriction, its outputs are ordinary tensors.
+
+| | `torch.no_grad()` | `torch.inference_mode()` |
+| --- | --- | --- |
+| Disables gradient tracking | yes | yes |
+| Disables version / view bookkeeping | no | yes (faster) |
+| Output reusable in later autograd | yes | no (raises) |
+| Since | always | 1.9+ |
+
+Rule of thumb: pure eval or serving loops where the output never re-enters training, use `inference_mode`. If the result might flow back into a differentiable computation (some RL targets, mixed train/eval code), stay on `no_grad`. TensorFlow needs neither, not opening a `GradientTape` already gives you the same effect.
 
 ## Worked example: a custom two-parameter fit, no `nn` at all
 
@@ -995,3 +1097,121 @@ Trick: put the model in `eval()` before export so dropout and batchnorm bake int
 - **`tf.function` and Python side effects.** Prints and appends run once at trace time. Use `tf.print` and TF ops.
 - **`from_logits` mismatch** in Keras. Match it to whether the last layer has an activation.
 - **Label dtype.** PyTorch cross entropy wants `long` integer labels, not float or one-hot.
+
+---
+
+# 32. Metrics and evaluation
+
+Keras computes metrics for you when you list them in `compile`. PyTorch has no built-in metrics, you either compute them by hand or use the `torchmetrics` library, which handles the tricky part of accumulating correctly across batches.
+
+```python
+# PyTorch, by hand: accuracy over a loader
+model.eval()
+correct = total = 0
+with torch.inference_mode():
+    for xb, yb in loader:
+        preds = model(xb.to(dev)).argmax(1).cpu()
+        correct += (preds == yb).sum().item()
+        total += yb.size(0)
+print(correct / total)
+
+# PyTorch, with torchmetrics (handles multi-batch accumulation)
+import torchmetrics
+acc = torchmetrics.Accuracy(task="multiclass", num_classes=3)
+for xb, yb in loader:
+    acc.update(model(xb).argmax(1), yb)
+print(acc.compute())
+
+# TensorFlow: declare in compile, read from evaluate
+model.compile(..., metrics=["accuracy",
+                            keras.metrics.Precision(),
+                            keras.metrics.Recall()])
+loss, *scores = model.evaluate(X, y)
+```
+
+Trick: accuracy is not a mean of per-batch accuracies when the last batch is smaller. Sum correct predictions and divide by total samples, or let `torchmetrics`/Keras accumulate. Averaging the per-batch numbers quietly overweights the small final batch.
+
+---
+
+# 33. Odds and ends that matter
+
+The small tools that are easy to miss but come up in real projects.
+
+## Buffers: non-learnable state that still travels with the model
+
+Some tensors are part of the model but are not trained, for example batchnorm running statistics or a fixed positional encoding. In PyTorch, register them as buffers so they move with `.to(device)` and are saved in the `state_dict`, but never get gradients.
+
+```python
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("running_mean", torch.zeros(64))  # saved, moved, no grad
+```
+
+The Keras equivalent is `self.add_weight(..., trainable=False)`.
+
+## Hooks: peek at or edit tensors mid-forward
+
+Hooks let you tap into a layer without changing its code, handy for grabbing activations or debugging gradients.
+
+```python
+acts = {}
+def grab(name):
+    def hook(module, inp, out): acts[name] = out.detach()
+    return hook
+model.fc1.register_forward_hook(grab("fc1"))   # acts["fc1"] fills on next forward
+```
+
+## EMA: an averaged copy of the weights for better eval
+
+Keeping an exponential moving average of the weights and evaluating with that often gives a small, free accuracy bump. Standard in diffusion models and many vision results.
+
+```python
+ema = torch.optim.swa_utils.AveragedModel(
+    model, avg_fn=lambda avg, cur, n: 0.999*avg + 0.001*cur)
+# after each optimizer.step():
+ema.update_parameters(model)
+# evaluate with ema instead of model
+```
+
+## Activation checkpointing: trade compute for memory
+
+For models too big to fit, activation (gradient) checkpointing drops intermediate activations during the forward pass and recomputes them during backward. You pay extra compute to cut memory a lot, which is how large models train on smaller GPUs.
+
+```python
+from torch.utils.checkpoint import checkpoint
+out = checkpoint(expensive_block, x)   # activations recomputed in backward
+```
+
+Keras has no drop-in equal, the usual answer there is mixed precision plus a smaller batch.
+
+## Two micro-optimizations worth knowing
+
+- `optimizer.zero_grad(set_to_none=True)` frees the grad tensors instead of filling them with zeros. Slightly faster and less memory, and it is the default in newer PyTorch.
+- `x.to(dev, non_blocking=True)` overlaps the CPU-to-GPU copy with compute, but only helps when the source tensor came from a `DataLoader` with `pin_memory=True`.
+
+---
+
+# 34. One-glance recap
+
+Strip everything away and the two loops are the whole story.
+
+PyTorch, five steps, written by you:
+
+```python
+optimizer.zero_grad()
+loss = loss_fn(model(xb), yb)
+loss.backward()
+optimizer.step()
+```
+
+TensorFlow, the same math, handed to `fit` or written inside a `GradientTape`:
+
+```python
+with tf.GradientTape() as tape:
+    loss = loss_fn(yb, model(xb, training=True))
+grads = tape.gradient(loss, model.trainable_variables)
+optimizer.apply_gradients(zip(grads, model.trainable_variables))
+```
+
+Everything else on this page (layers, data, schedules, metrics, dtype details) hangs off those two skeletons. Learn the skeleton, look up the rest here.
