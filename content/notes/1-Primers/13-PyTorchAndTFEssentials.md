@@ -36,7 +36,6 @@ If you only read one thing, read this. Both columns do the exact same job in the
    THE LIFECYCLE (same for both)
 
    data  ->  model  ->  train loop  ->  inference  ->  save  ->  load
-   §18       §10        §16            §9 (eval)      §19       §19
 ```
 
 ```python
@@ -109,7 +108,7 @@ Read the PyTorch training block top to bottom and you see the machinery. Read th
 
 ---
 
-# 1. Install and sanity check
+# Install and sanity check
 
 ```python
 # PyTorch
@@ -127,7 +126,7 @@ print(tf.__version__, tf.config.list_physical_devices('GPU'))
 
 ---
 
-# 2. Tensors: the basics
+# Tensors: the basics
 
 A tensor is an n-dimensional array that can live on a GPU and remember how it was computed. Same idea in both frameworks.
 
@@ -177,7 +176,7 @@ Trick: label tensors for classification must be `long` (int64) in PyTorch cross 
 
 ---
 
-# 3. Devices and GPU
+# Devices and GPU
 
 | Task        | PyTorch                                                | TensorFlow                                        |
 | ----------- | ------------------------------------------------------ | ------------------------------------------------- |
@@ -201,7 +200,7 @@ for gpu in tf.config.list_physical_devices('GPU'):
 
 ---
 
-# 4. Indexing, slicing, masking
+# Indexing, slicing, masking
 
 Both index like NumPy. The useful extras are boolean masks and gather. Every example below uses this one small tensor so the outputs are easy to picture:
 
@@ -231,7 +230,7 @@ Trick: use masks to avoid loops. To zero out padded positions in a batch of sequ
 
 ---
 
-# 5. Reshaping and moving axes
+# Reshaping and moving axes
 
 This is where I forget syntax most, so here it is in one place. The shape column is the whole point: reshaping is bookkeeping on shapes, so track the shape and the rest follows. Start from `x = torch.arange(6)`, a flat vector of `[0,1,2,3,4,5]` with shape `(6,)`.
 
@@ -272,7 +271,7 @@ Trick: `-1` means "infer this dimension." `x.reshape(batch, -1)` flattens everyt
 
 ---
 
-# 6. Broadcasting
+# Broadcasting
 
 Both follow NumPy rules. Align shapes from the right, a dimension of size 1 stretches to match, a missing dimension counts as 1.
 
@@ -289,7 +288,7 @@ Trick to catch silent bugs: broadcasting will happily combine `(N, 1)` with `(1,
 
 ---
 
-# 7. Math: elementwise and reductions
+# Math: elementwise and reductions
 
 | Task            | PyTorch                        | TensorFlow                              |
 | --------------- | ------------------------------ | --------------------------------------- |
@@ -311,7 +310,7 @@ Trick: `keepdim=True` (PyTorch) / `keepdims=True` (TF) keeps the reduced axis as
 
 ---
 
-# 8. einsum, the one op to remember
+# einsum, the one op to remember
 
 If you learn a single power tool, learn `einsum`. It is identical in both frameworks and replaces most matmul, transpose, and sum-of-products gymnastics with one readable string.
 
@@ -329,7 +328,7 @@ Read the string as "these input axes, produce these output axes, sum over anythi
 
 ---
 
-# 9. Autograd: how gradients happen
+# Autograd: how gradients happen
 
 This is the real conceptual difference, so it gets room and a picture.
 
@@ -389,12 +388,12 @@ with torch.inference_mode():      # prefer this for pure inference loops
 
 The catch: tensors created inside an `inference_mode` block are marked as "inference tensors" and error out if you later feed them into anything differentiable (re-attach them to a training graph, call `requires_grad_(True)`, and so on). `no_grad` has no such restriction, its outputs are ordinary tensors.
 
-| | `torch.no_grad()` | `torch.inference_mode()` |
-| --- | --- | --- |
-| Disables gradient tracking | yes | yes |
-| Disables version / view bookkeeping | no | yes (faster) |
-| Output reusable in later autograd | yes | no (raises) |
-| Since | always | 1.9+ |
+|                                     | `torch.no_grad()` | `torch.inference_mode()` |
+| ----------------------------------- | ----------------- | ------------------------ |
+| Disables gradient tracking          | yes               | yes                      |
+| Disables version / view bookkeeping | no                | yes (faster)             |
+| Output reusable in later autograd   | yes               | no (raises)              |
+| Since                               | always            | 1.9+                     |
 
 Rule of thumb: pure eval or serving loops where the output never re-enters training, use `inference_mode`. If the result might flow back into a differentiable computation (some RL targets, mixed train/eval code), stay on `no_grad`. TensorFlow needs neither, not opening a `GradientTape` already gives you the same effect.
 
@@ -424,7 +423,7 @@ That loop is the whole of gradient descent with nothing hidden. Everything later
 
 ---
 
-# 10. Building a model
+# Building a model
 
 ## Quick way: a stack of layers
 
@@ -489,7 +488,7 @@ Trick: `model.summary()` in Keras and `print(model)` in PyTorch both dump the ar
 
 ---
 
-# 11. The layers you reach for
+# The layers you reach for
 
 | Layer               | PyTorch                           | TensorFlow / Keras                |
 | ------------------- | --------------------------------- | --------------------------------- |
@@ -528,7 +527,7 @@ with kernel $k$, padding $p$, stride $s$. "Same" padding keeps the spatial size 
 
 ---
 
-# 12. Activations and losses
+# Activations and losses
 
 | Piece                      | PyTorch                  | TensorFlow                                        |
 | -------------------------- | ------------------------ | ------------------------------------------------- |
@@ -554,7 +553,7 @@ Getting this wrong does not crash, it just trains badly or goes NaN, which is wh
 
 ---
 
-# 13. Optimizers
+# Optimizers
 
 | Optimizer      | PyTorch                            | TensorFlow                |
 | -------------- | ---------------------------------- | ------------------------- |
@@ -576,7 +575,7 @@ optimizer = torch.optim.AdamW([
 
 ---
 
-# 14. Learning-rate schedules
+# Learning-rate schedules
 
 | Schedule          | PyTorch                         | TensorFlow                        |
 | ----------------- | ------------------------------- | --------------------------------- |
@@ -597,7 +596,7 @@ Trick: most schedulers step once per epoch, but `OneCycleLR` steps once per batc
 
 ---
 
-# 15. Weight initialization
+# Weight initialization
 
 Keras initializes sensibly by default (Glorot uniform for Dense). PyTorch also has reasonable defaults, but people override them for specific architectures.
 
@@ -619,7 +618,7 @@ Rule of thumb: Kaiming (He) init for ReLU-family activations, Xavier (Glorot) fo
 
 ---
 
-# 16. The training loop
+# The training loop
 
 The heart of it. PyTorch makes you write the loop, TensorFlow lets you write it or hand it off.
 
@@ -686,7 +685,7 @@ model = torch.compile(model)          # PyTorch 2.x, optional, usually just work
 
 ---
 
-# 17. A full worked example, end to end
+# A full worked example, end to end
 
 Same tiny classifier both ways, so the whole shape of a project is on one screen.
 
@@ -743,7 +742,7 @@ Same model, same optimizer, same loss. PyTorch spells out the loop, Keras hides 
 
 ---
 
-# 18. Data pipelines
+# Data pipelines
 
 | Task             | PyTorch                                       | TensorFlow                                   |
 | ---------------- | --------------------------------------------- | -------------------------------------------- |
@@ -785,7 +784,7 @@ Trick: `tf.data.AUTOTUNE` lets TF tune the worker count and prefetch buffer for 
 
 ---
 
-# 19. Saving and loading
+# Saving and loading
 
 | Task              | PyTorch                                     | TensorFlow                           |
 | ----------------- | ------------------------------------------- | ------------------------------------ |
@@ -814,7 +813,7 @@ Trick: `strict=False` in `load_state_dict` lets you load a checkpoint whose keys
 
 ---
 
-# 20. Transfer learning and freezing
+# Transfer learning and freezing
 
 Freezing means "do not update these weights," done by turning off their gradients.
 
@@ -837,7 +836,7 @@ Trick: the two-stage recipe that works. First freeze the backbone and train only
 
 ---
 
-# 21. Gradient clipping and accumulation
+# Gradient clipping and accumulation
 
 Two tricks that come up constantly in real training.
 
@@ -871,7 +870,7 @@ The accumulation trick leans on the exact PyTorch behavior people usually fight:
 
 ---
 
-# 22. Custom layers and custom losses
+# Custom layers and custom losses
 
 ```python
 # PyTorch custom layer: it is just a Module
@@ -908,7 +907,7 @@ Key idea: in PyTorch anything wrapped in `nn.Parameter` inside a Module is autom
 
 ---
 
-# 23. Mixed precision (faster, less memory)
+# Mixed precision (faster, less memory)
 
 Both let you run most ops in 16-bit while keeping sensitive ones in 32-bit. On modern GPUs this is close to free speed and a big memory saving.
 
@@ -941,7 +940,7 @@ Keras does this scaling internally once you set the policy. Trick: keep the fina
 
 ---
 
-# 24. Distributed and multi-GPU
+# Distributed and multi-GPU
 
 | Approach         | PyTorch                               | TensorFlow                      |
 | ---------------- | ------------------------------------- | ------------------------------- |
@@ -974,7 +973,7 @@ For PyTorch, DDP is the real answer and `DataParallel` is the toy. DDP runs one 
 
 ---
 
-# 25. Profiling and speed
+# Profiling and speed
 
 | Tool                | PyTorch                                | TensorFlow                   |
 | ------------------- | -------------------------------------- | ---------------------------- |
@@ -988,7 +987,7 @@ Trick: `torch.backends.cudnn.benchmark = True` lets cuDNN pick the fastest conv 
 
 ---
 
-# 26. TensorBoard and logging
+# TensorBoard and logging
 
 ```python
 # PyTorch
@@ -1006,7 +1005,7 @@ Launch with `tensorboard --logdir runs`. Trick: log the learning rate and gradie
 
 ---
 
-# 27. Callbacks and early stopping
+# Callbacks and early stopping
 
 Keras has a rich callback system built into `fit`. In PyTorch you write the same logic inline in your loop, which is the tradeoff for writing the loop yourself.
 
@@ -1034,7 +1033,7 @@ for epoch in range(epochs):
 
 ---
 
-# 28. Reproducibility and seeding
+# Reproducibility and seeding
 
 ```python
 # PyTorch
@@ -1052,7 +1051,7 @@ Trick: full determinism costs speed because it disables some nondeterministic GP
 
 ---
 
-# 29. Exporting for deployment
+# Exporting for deployment
 
 | Target                      | PyTorch                                 | TensorFlow                           |
 | --------------------------- | --------------------------------------- | ------------------------------------ |
@@ -1073,7 +1072,7 @@ Trick: put the model in `eval()` before export so dropout and batchnorm bake int
 
 ---
 
-# 30. Debugging tricks that actually save time
+# Debugging tricks that actually save time
 
 - Print shapes first, always. Most bugs are shape bugs. A wrong shape that still runs because of broadcasting is the sneakiest bug there is.
 - Overfit one batch on purpose. Take a single batch and train until loss is near zero. If the model cannot memorize one batch, your model or loss wiring is broken, not your data or hyperparameters. This test has saved me more than any other.
@@ -1085,7 +1084,7 @@ Trick: put the model in `eval()` before export so dropout and batchnorm bake int
 
 ---
 
-# 31. The gotchas I have actually hit
+# The gotchas I have actually hit
 
 - **Forgetting `zero_grad`.** PyTorch adds new gradients onto old. Clear them every step (except when accumulating on purpose).
 - **Wrong device.** Model on GPU, batch on CPU, instant crash. Move both.
@@ -1100,7 +1099,7 @@ Trick: put the model in `eval()` before export so dropout and batchnorm bake int
 
 ---
 
-# 32. Metrics and evaluation
+# Metrics and evaluation
 
 Keras computes metrics for you when you list them in `compile`. PyTorch has no built-in metrics, you either compute them by hand or use the `torchmetrics` library, which handles the tricky part of accumulating correctly across batches.
 
@@ -1133,7 +1132,7 @@ Trick: accuracy is not a mean of per-batch accuracies when the last batch is sma
 
 ---
 
-# 33. Odds and ends that matter
+# Odds and ends that matter
 
 The small tools that are easy to miss but come up in real projects.
 
@@ -1192,7 +1191,7 @@ Keras has no drop-in equal, the usual answer there is mixed precision plus a sma
 
 ---
 
-# 34. One-glance recap
+# One-glance recap
 
 Strip everything away and the two loops are the whole story.
 
