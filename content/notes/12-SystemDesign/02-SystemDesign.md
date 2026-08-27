@@ -1,7 +1,7 @@
 ---
 title: "System Design Fundamentals"
 date: 2026-08-22
-summary: "The standard building blocks: SQL vs NoSQL, vertical vs horizontal scaling, load balancers, replication, cache, CDN, stateless web tier, multiple data centers, message queues, and sharding."
+summary: "The standard building blocks: SQL vs NoSQL, vertical vs horizontal scaling, load balancers, replication, cache, CDN, stateless web tier, multiple data centers, message queues, sharding, and back-of-the-envelope estimation."
 tags: [System Design, Scalability, Databases, Caching, Sharding]
 ---
 
@@ -333,3 +333,105 @@ Challenges:
 - **Joins and denormalization**: cross-shard joins are impractical. Denormalize and duplicate so each query hits one shard.
 
 Try the cheap options first: cache harder, push reads to replicas, archive cold rows, and move logs, sessions, and analytics to a NoSQL store.
+
+---
+
+# Back-of-the-envelope estimation
+
+Rough numbers so you can size QPS, storage, and latency in an interview. Order of magnitude is enough. Round freely: 86400 seconds/day becomes 10^5.
+
+## Powers of 2
+
+1 byte = 8 bits. ASCII char = 1 byte. Unicode is 2 to 4 bytes.
+
+| Power | Approx        | Name |
+| ----- | ------------- | ---- |
+| 2^10  | 1 thousand    | 1 KB |
+| 2^20  | 1 million     | 1 MB |
+| 2^30  | 1 billion     | 1 GB |
+| 2^40  | 1 trillion    | 1 TB |
+| 2^50  | 1 quadrillion | 1 PB |
+
+Time shortcuts:
+
+- 1 day ≈ 10^5 seconds (86400).
+- 1 month ≈ 2.5 million seconds.
+- 1 year ≈ 3 × 10^7 seconds.
+
+## Latency numbers (2026)
+
+Memorize the jumps, not the exact ns. Each row is roughly 10x to 100x slower than the one above it.
+
+| Operation                         | Time   | Note                                 |
+| --------------------------------- | ------ | ------------------------------------ |
+| L1 cache                          | 1 ns   | Fastest CPU-local memory             |
+| Branch mispredict                 | 3 ns   | Pipeline flush                       |
+| L2 cache                          | 3 ns   | Per-core mid-level cache             |
+| Mutex lock/unlock                 | 20 ns  | Uncontended, no syscall              |
+| Main memory (DDR5)                | 80 ns  | After a cache miss                   |
+| Compress 1 KB (LZ4/Snappy)        | 2 µs   | In-memory                            |
+| Send 2 KB over 10 GbE             | 2 µs   | Includes TCP/kernel overhead         |
+| Read 1 MB sequentially from RAM   | 20 µs  | DRAM bandwidth bound                 |
+| Same-datacenter RTT               | 300 µs | Typical service-to-service TCP       |
+| HDD seek                          | 5 ms   | 7200 RPM. NVMe random read is ~15 µs |
+| Read 1 MB sequentially from 1 GbE | 8 ms   | ~125 MB/s                            |
+| Read 1 MB sequentially from HDD   | 15 ms  | Same 1 MB from NVMe ≈ 150 µs         |
+| US West → Europe → US West        | 130 ms | Speed of light in fiber              |
+
+What this implies in a design:
+
+- Memory is cheap. Disk is not. Cache before you scale the DB.
+- A same-DC RPC is ~300 µs. A few hops are fine. Dozens of serial hops are not.
+- Cross-region is ~100 ms. Keep it off the user-facing critical path if you can.
+- Sequential reads crush random seeks. Batch, scan, and sequential logs beat point lookups on disk.
+
+## Availability (nines)
+
+| Availability    | Downtime per year |
+| --------------- | ----------------- |
+| 99% (two nines) | 3.65 days         |
+| 99.9% (three)   | 8.77 hours        |
+| 99.99% (four)   | 52.6 minutes      |
+| 99.999% (five)  | 5.26 minutes      |
+
+Each extra nine is expensive. Say which one you are targeting before you add multi-DC.
+
+## What you actually compute
+
+Three numbers, in this order:
+
+1. **QPS.** `avg QPS = DAU × requests per user per day / 10^5`. Peak is usually 2× to 3× average.
+2. **Storage.** `users × bytes per write × writes per day × retention`. Add a 20 to 30% overhead for indexes.
+3. **Bandwidth.** `QPS × payload size`. Split read vs write. CDN absorbs most static bytes.
+
+Worked sketch, 10M DAU, 10 requests/user/day, 1 KB written per user per day, keep 5 years:
+
+```
+avg QPS  = 10M × 10 / 10^5 = 1000
+peak QPS = 2× to 3×        ≈ 2000 to 3000
+
+storage  = 10M × 1 KB × 365 × 5
+         ≈ 18 TB  (+ indexes ≈ 25 TB)
+```
+
+Then map those to boxes: if one MySQL primary handles ~1k to 5k write QPS, this write load still fits one primary plus replicas. If writes were 50k QPS, you shard.
+
+Typical capacities to quote (order of magnitude, depends on payload):
+
+- Web server: a few thousand QPS.
+- Redis: 100k+ QPS.
+- MySQL primary: ~1k to 5k writes/s, more for reads.
+- Commodity disk: a few hundred MB/s sequential. Random HDD IOPS are tiny; NVMe is tens of thousands.
+
+---
+
+# Revision checklist
+
+- Web tier stateless, state in a shared store.
+- Redundancy at every tier, no single point of failure.
+- Cache aggressively, static assets on a CDN.
+- Reads scale with replicas, writes scale with sharding.
+- Split tiers into services so each scales on its own.
+- Multiple data centers once availability demands it.
+- Monitor host, aggregate, and business metrics. Automate deploys.
+- Estimate QPS, storage, and bandwidth before drawing extra boxes.
