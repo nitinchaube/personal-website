@@ -1,7 +1,7 @@
 ---
 title: "Graphs"
 date: 2026-08-18
-summary: "Graph types, representations, connected components, BFS/DFS, and starter problems (Provinces, Islands, Flood Fill, Rotting Oranges)."
+summary: "Graph types, representations, connected components, BFS/DFS, cycle detection, and problems (Provinces, Islands, Flood Fill, Rotting Oranges, 01 Matrix, Surrounded Regions)."
 tags: [Graphs, DSA, Algorithms]
 ---
 
@@ -455,4 +455,219 @@ class Solution:
                     q.append((nr, nc, time + 1))
 
         return -1 if fresh > 0 else res
+```
+
+---
+
+# Cycle detection
+
+A cycle means you can walk edges and return to a node you already visited. The check differs for **undirected** vs **directed** graphs.
+
+```
+undirected (cycle)              undirected (no cycle)         directed (cycle)
+  1 ─── 2                         1 ─── 2                     1 ──→ 2
+  │     │                         │                           ↑     │
+  └── 3 ┘                         3                           └─────┘
+  back edge to node on path       tree, no back edge          back edge to GRAY node
+```
+
+|              | Undirected                                                             | Directed                                                         |
+| ------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Cycle signal | visited neighbor that is **not** your parent                           | neighbor already **GRAY** (on current DFS path)                  |
+| Algorithm    | BFS or DFS + `parent`                                                  | DFS + 3 colors (WHITE / GRAY / BLACK)                            |
+| Why parent?  | edge `u-v` appears twice in adj list; parent is the node you came from | parent trick does not work; need to track active recursion stack |
+
+Loop over all nodes before each traversal (graph may be disconnected).
+
+### Undirected graph
+
+**Idea:** during traversal, if you reach a visited neighbor that is not your parent, that neighbor is a back edge → cycle.
+
+**DFS**
+
+```python
+def has_cycle_undirected_dfs(n, adj):
+    visited = [False] * n
+
+    def dfs(node, parent):
+        visited[node] = True
+        for nb in adj[node]:
+            if not visited[nb]:
+                if dfs(nb, node):
+                    return True
+            elif nb != parent:  # back edge, not the edge we arrived on
+                return True
+        return False
+
+    for i in range(n):
+        if not visited[i] and dfs(i, -1):
+            return True
+    return False
+```
+
+**BFS**
+
+```python
+from collections import deque
+
+def has_cycle_undirected_bfs(n, adj):
+    visited = [False] * n
+
+    def bfs(src):
+        visited[src] = True
+        q = deque([(src, -1)])  # (node, parent)
+        while q:
+            node, parent = q.popleft()
+            for nb in adj[node]:
+                if not visited[nb]:
+                    visited[nb] = True
+                    q.append((nb, node))
+                elif nb != parent:  # back edge
+                    return True
+        return False
+
+    for i in range(n):
+        if not visited[i] and bfs(i):
+            return True
+    return False
+```
+
+### Directed graph
+
+**Idea:** 3-color DFS. GRAY = on the current recursion path. A GRAY neighbor means a back edge → cycle.
+
+```
+WHITE = unvisited     GRAY = in current DFS path     BLACK = fully explored
+
+  1(W) → 2(W) → 3(W)
+         ↑____________↓
+  when 3 points back to 2 (GRAY) → cycle
+```
+
+```python
+def has_cycle_directed(n, adj):
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = [WHITE] * n
+
+    def dfs(node):
+        color[node] = GRAY
+        for nb in adj[node]:
+            if color[nb] == GRAY:  # back edge to node on current path
+                return True
+            if color[nb] == WHITE and dfs(nb):
+                return True
+        color[node] = BLACK
+        return False
+
+    return any(color[i] == WHITE and dfs(i) for i in range(n))
+```
+
+Time `O(n + 2E)` for all versions. Space `O(n)`.
+
+| Problem signal                                      | Use                             |
+| --------------------------------------------------- | ------------------------------- |
+| undirected graph, "has a cycle?"                    | parent-based BFS/DFS            |
+| directed graph, "has a cycle?" / invalid topo order | 3-color DFS                     |
+| directed graph, "can finish all courses?"           | topo sort; empty result = cycle |
+
+---
+
+### Problem 5: 01 Matrix ([LC 542](https://leetcode.com/problems/01-matrix/))
+
+Binary matrix: `0` = empty, `1` = obstacle. For each cell, return Manhattan distance to the **nearest** `0`.
+
+```
+input                    output (dist to nearest 0)
+  0 0 0                    0 0 0
+  0 1 1          →         0 1 2
+  1 1 1                    1 2 3
+```
+
+- Pattern: **multi-source BFS**. Seed the queue with **all** `0` cells at distance `0` (inverse of Rotting Oranges: spread from targets, not sources).
+- First time a `1` is reached = shortest distance to any `0` (BFS guarantees min steps on unweighted grid).
+- No need to store `steps` in the queue; set `dist[r][c]` when you dequeue (or when you enqueue).
+- Time `O(m * n)`, space `O(m * n)`.
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def updateMatrix(self, mat: List[List[int]]) -> List[List[int]]:
+        m, n = len(mat), len(mat[0])
+        dist = [[0] * n for _ in range(m)]
+        visited = [[False] * n for _ in range(m)]
+        q = deque()
+
+        # all 0s are sources at distance 0
+        for i in range(m):
+            for j in range(n):
+                if mat[i][j] == 0:
+                    visited[i][j] = True
+                    q.append((i, j))
+
+        dirs = [(0, 1), (1, 0), (-1, 0), (0, -1)]
+        while q:
+            r, c = q.popleft()
+            for dr, dc in dirs:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < m and 0 <= nc < n and not visited[nr][nc]:
+                    visited[nr][nc] = True
+                    dist[nr][nc] = dist[r][c] + 1  # first visit = nearest 0
+                    q.append((nr, nc))
+        return dist
+```
+
+**vs Rotting Oranges:** both multi-source BFS on a grid. Oranges spread from all `2`s and track time; 01 Matrix spreads from all `0`s and records distance to the nearest zero.
+
+### Problem 6: Surrounded Regions ([LC 130](https://leetcode.com/problems/surrounded-regions/))
+
+Board of `"X"` and `"O"`. Capture every `"O"` that is **fully surrounded** by `"X"` (flip to `"X"`). Any `"O"` on the border, or connected to a border `"O"`, stays `"O"`.
+
+```
+before                    after
+  X X X X                   X X X X
+  X O O X         →         X X X X
+  X X O X                   X X X X
+  X O X X                   X O X X   ← bottom O touches border, safe
+```
+
+- Pattern: **invert the problem**. Do not search for surrounded regions. Mark all `"O"`s reachable from the **border**, then flip everything else.
+- Seed DFS/BFS from every border cell that is `"O"`. Those regions are **safe**.
+- After that pass, any unvisited `"O"` is landlocked → flip to `"X"`.
+- Time `O(m * n)`, space `O(m * n)` for `visited` (or mark safe cells as `"T"` in-place and convert back).
+
+```python
+from typing import List
+
+class Solution:
+    def solve(self, board: List[List[str]]) -> None:
+        m, n = len(board), len(board[0])
+        visited = [[False] * n for _ in range(m)]
+        dirs = [(0, 1), (1, 0), (-1, 0), (0, -1)]
+
+        def dfs(i, j):
+            visited[i][j] = True  # mark safe (connected to border)
+            for dr, dc in dirs:
+                nr, nc = i + dr, j + dc
+                if 0 <= nr < m and 0 <= nc < n and not visited[nr][nc] and board[nr][nc] == "O":
+                    dfs(nr, nc)
+
+        # flood from all border O's
+        for j in range(n):
+            if board[0][j] == "O" and not visited[0][j]:
+                dfs(0, j)
+            if board[m - 1][j] == "O" and not visited[m - 1][j]:
+                dfs(m - 1, j)
+        for i in range(m):
+            if board[i][0] == "O" and not visited[i][0]:
+                dfs(i, 0)
+            if board[i][n - 1] == "O" and not visited[i][n - 1]:
+                dfs(i, n - 1)
+
+        # unvisited O = surrounded → capture
+        for i in range(m):
+            for j in range(n):
+                if board[i][j] == "O" and not visited[i][j]:
+                    board[i][j] = "X"
 ```
