@@ -1,7 +1,7 @@
 ---
 title: "Graphs"
 date: 2026-08-18
-summary: "Graph types, representations, connected components, BFS/DFS, cycle detection, and problems (Provinces, Islands, Flood Fill, Rotting Oranges, 01 Matrix, Surrounded Regions)."
+summary: "Graph types, representations, connected components, BFS/DFS, cycle detection, bipartite check, and related problems."
 tags: [Graphs, DSA, Algorithms]
 ---
 
@@ -261,7 +261,8 @@ isConnected =
 - Pattern: connected components on a matrix graph (not an edge list).
 - Outer loop over all cities; start a DFS/BFS only when unvisited; each start = one province.
 - Neighbors of `i` = every `j` where `isConnected[i][j] == 1` (skip `j == i`).
-- Time `O(n^2)`, space `O(n)` for `visited`. Matrix is dense, so scanning all columns per city is fine.
+- Matrix is dense, so scanning all columns per city is fine.
+- **Time** `O(n^2)` | **Space** `O(n)` (`visited` + recursion stack)
 
 ```python
 from typing import List
@@ -304,7 +305,8 @@ Grid of `"1"` (land) and `"0"` (water). An island is a max connected group of la
 - Pattern: connected components on a **grid** (implicit graph).
 - Outer loop over every cell; when you see land, flood-fill the whole island, then `count += 1`.
 - Neighbors = 4 directions `(±1, 0)`, `(0, ±1)`. Mark visited by flipping `"1"` → `"0"` (or use a `visited` set).
-- BFS or DFS both work. Time `O(m * n)`, space `O(m * n)` worst case (queue/stack).
+- BFS or DFS both work.
+- **Time** `O(m * n)` | **Space** `O(m * n)` worst case (queue / recursion stack)
 
 **BFS**
 
@@ -384,7 +386,7 @@ image, start (1,1), color = 2
 - Pattern: DFS/BFS flood from **one** seed cell (not a count-all-components loop).
 - Capture `ic = image[sr][sc]` first. Recolor only cells equal to `ic`.
 - Early return if `ic == color` (already filled). Without this, DFS never terminates: every neighbor still "matches" and you recurse forever.
-- Time `O(m * n)`, space `O(m * n)` recursion/queue worst case.
+- **Time** `O(m * n)` | **Space** `O(m * n)` worst case (recursion / queue)
 
 ```python
 from typing import List
@@ -422,7 +424,7 @@ minute 0          minute 1          minute 2
 - Track `fresh` count. Each time you rot a fresh orange, decrement it.
 - Answer is the max time on the queue. If `fresh > 0` when BFS ends, return `-1`.
 - Mark rotten **before** enqueue (same as Islands) so a cell is not queued twice.
-- Time `O(m * n)`, space `O(m * n)`.
+- **Time** `O(m * n)` | **Space** `O(m * n)` (queue)
 
 ```python
 from collections import deque
@@ -562,7 +564,7 @@ def has_cycle_directed(n, adj):
     return any(color[i] == WHITE and dfs(i) for i in range(n))
 ```
 
-Time `O(n + 2E)` for all versions. Space `O(n)`.
+Time `O(n + E)` for all versions. Space `O(n)` (`visited` / `color` + stack / queue).
 
 | Problem signal                                      | Use                             |
 | --------------------------------------------------- | ------------------------------- |
@@ -586,7 +588,7 @@ input                    output (dist to nearest 0)
 - Pattern: **multi-source BFS**. Seed the queue with **all** `0` cells at distance `0` (inverse of Rotting Oranges: spread from targets, not sources).
 - First time a `1` is reached = shortest distance to any `0` (BFS guarantees min steps on unweighted grid).
 - No need to store `steps` in the queue; set `dist[r][c]` when you dequeue (or when you enqueue).
-- Time `O(m * n)`, space `O(m * n)`.
+- **Time** `O(m * n)` | **Space** `O(m * n)` (`dist` + `visited` + queue)
 
 ```python
 from collections import deque
@@ -635,7 +637,7 @@ before                    after
 - Pattern: **invert the problem**. Do not search for surrounded regions. Mark all `"O"`s reachable from the **border**, then flip everything else.
 - Seed DFS/BFS from every border cell that is `"O"`. Those regions are **safe**.
 - After that pass, any unvisited `"O"` is landlocked → flip to `"X"`.
-- Time `O(m * n)`, space `O(m * n)` for `visited` (or mark safe cells as `"T"` in-place and convert back).
+- **Time** `O(m * n)` | **Space** `O(m * n)` (`visited`; or mark `"T"` in-place for `O(1)` extra)
 
 ```python
 from typing import List
@@ -670,4 +672,295 @@ class Solution:
             for j in range(n):
                 if board[i][j] == "O" and not visited[i][j]:
                     board[i][j] = "X"
+```
+
+### Problem 7: Number of Enclaves ([LC 1020](https://leetcode.com/problems/number-of-enclaves/))
+
+Grid: `0` = sea, `1` = land. An **enclave** is a land cell that cannot walk off the grid (4-directional moves on land). Return the count of such cells.
+
+```
+  0 0 0 0
+  1 0 1 0
+  0 1 1 0
+  0 0 0 0
+
+  border-connected land is reachable (walks off grid)
+  the 1s in the middle are enclaves → answer = 3
+```
+
+- Pattern: same invert as Surrounded Regions. Flood from all **border land** cells, mark them visited (can walk off).
+- Count remaining unvisited `1`s. That count is the answer (cells, not components).
+- Surrounded Regions flips `"O"` → `"X"`. Here you **count** leftover land instead of flipping.
+- BFS or DFS both work.
+- **Time** `O(m * n)` | **Space** `O(m * n)` (`visited` + queue / recursion)
+
+**DFS**
+
+```python
+from typing import List
+
+class Solution:
+    def numEnclaves(self, grid: List[List[int]]) -> int:
+        m, n = len(grid), len(grid[0])
+        visited = [[False] * n for _ in range(m)]
+        dirs = [(0, 1), (1, 0), (-1, 0), (0, -1)]
+
+        def dfs(i, j):
+            visited[i][j] = True  # can walk off the grid
+            for dr, dc in dirs:
+                nr, nc = i + dr, j + dc
+                if 0 <= nr < m and 0 <= nc < n and not visited[nr][nc] and grid[nr][nc] == 1:
+                    dfs(nr, nc)
+
+        # flood from all border land
+        for i in range(m):
+            if grid[i][0] == 1 and not visited[i][0]:
+                dfs(i, 0)
+            if grid[i][n - 1] == 1 and not visited[i][n - 1]:
+                dfs(i, n - 1)
+        for j in range(n):
+            if grid[0][j] == 1 and not visited[0][j]:
+                dfs(0, j)
+            if grid[m - 1][j] == 1 and not visited[m - 1][j]:
+                dfs(m - 1, j)
+
+        # leftover unvisited land = enclaves
+        return sum(
+            1 for i in range(m) for j in range(n)
+            if grid[i][j] == 1 and not visited[i][j]
+        )
+```
+
+**BFS**
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def numEnclaves(self, grid: List[List[int]]) -> int:
+        m, n = len(grid), len(grid[0])
+        visited = [[False] * n for _ in range(m)]
+        dirs = [(0, 1), (1, 0), (-1, 0), (0, -1)]
+        q = deque()
+
+        # seed queue with all border land
+        for i in range(m):
+            for j in (0, n - 1):
+                if grid[i][j] == 1 and not visited[i][j]:
+                    visited[i][j] = True
+                    q.append((i, j))
+        for j in range(n):
+            for i in (0, m - 1):
+                if grid[i][j] == 1 and not visited[i][j]:
+                    visited[i][j] = True
+                    q.append((i, j))
+
+        while q:
+            r, c = q.popleft()
+            for dr, dc in dirs:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < m and 0 <= nc < n and not visited[nr][nc] and grid[nr][nc] == 1:
+                    visited[nr][nc] = True  # mark before enqueue
+                    q.append((nr, nc))
+
+        return sum(
+            1 for i in range(m) for j in range(n)
+            if grid[i][j] == 1 and not visited[i][j]
+        )
+```
+
+**vs Surrounded Regions:** identical border flood. Regions flips safe-unreachable `"O"`s; Enclaves counts safe-unreachable `1`s.
+
+### Problem 8: Number of Distinct Islands ([GFG](https://www.geeksforgeeks.org/problems/number-of-distinct-islands/1))
+
+Count islands that are **unique by shape**. Two islands are the same if one is a translate of the other (same relative layout). Rotations / reflections count as different.
+
+```
+grid (1 = land)                 shapes (relative to start)
+
+  1 1 0 0 0                     island A start (0,0):
+  1 0 0 1 1                       (0,0),(0,1),(1,0)
+  0 0 0 1 0
+  0 1 1 0 0                     island B start (1,3):
+  1 1 0 0 0                       (0,0),(0,1),(1,0)  ← same shape as A
+
+  island C start (3,1): (0,0),(0,1),(1,0),(1,1)  ← different
+  answer = 2  (A and B share a shape; C is new)
+```
+
+- Pattern: Number of Islands + **shape signature**. While flooding, store each cell as `(r - r0, c - c0)` relative to the island's start.
+- Put each signature in a `set` (as a tuple of coords, or a path string of moves). `len(set)` = answer.
+- Order of DFS/BFS must be **deterministic** (same dir order always) so identical shapes hash the same.
+- **Time** `O(m * n)` | **Space** `O(m * n)` (`visited` + set of shapes)
+
+```python
+class Solution:
+    def countDistinctIslands(self, grid):
+        m, n = len(grid), len(grid[0])
+        visited = [[False] * n for _ in range(m)]
+        shapes = set()
+        dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        def dfs(i, j, r0, c0, shape):
+            visited[i][j] = True
+            for dr, dc in dirs:
+                nr, nc = i + dr, j + dc
+                if 0 <= nr < m and 0 <= nc < n and grid[nr][nc] == 1 and not visited[nr][nc]:
+                    shape.append((nr - r0, nc - c0))  # relative to island origin
+                    dfs(nr, nc, r0, c0, shape)
+
+        for i in range(m):
+            for j in range(n):
+                if grid[i][j] == 1 and not visited[i][j]:
+                    shape = [(0, 0)]
+                    dfs(i, j, i, j, shape)
+                    shapes.add(tuple(shape))  # hashable signature
+        return len(shapes)
+```
+
+**vs Number of Islands:** Islands counts components. Distinct Islands counts **unique shapes** (translate-invariant signatures).
+
+### Problem 9: Detect Cycle in a Directed Graph ([GFG](https://www.geeksforgeeks.org/problems/detect-cycle-in-a-directed-graph/1))
+
+Given `V` nodes and a directed edge list, return whether the graph has a cycle.
+
+```
+edges = [[0,1],[1,2],[2,0]]          edges = [[0,1],[1,2]]
+
+  0 → 1 → 2                           0 → 1 → 2
+  ↑_______↓                           no back edge → False
+  cycle (2→0) → True
+```
+
+- Pattern: directed cycle DFS with **`visited` + `pathVisited**` (same idea as 3-color: `pathVisited` = GRAY = on current recursion path).
+- Build adj list from edges first (`u → v` only).
+- On enter: mark both `visited` and `pathVisited`. On leave: clear `pathVisited` only (node is done, like BLACK).
+- Neighbor already on current path (`pathVisited[nb]`) → back edge → cycle.
+- Neighbor visited but not on path → safe (another finished branch).
+- See [Cycle detection → Directed](#directed-graph) for the WHITE/GRAY/BLACK form.
+- **Time** `O(V + E)` | **Space** `O(V + E)` (adj + two bool arrays + recursion)
+
+```python
+class Solution:
+    def isCyclic(self, V: int, edges: list[list[int]]) -> bool:
+        adj = [[] for _ in range(V)]
+        for u, v in edges:
+            adj[u].append(v)
+
+        visited = [False] * V
+        path_visited = [False] * V  # nodes on current DFS path (GRAY)
+
+        def dfs(node):
+            visited[node] = True
+            path_visited[node] = True
+            for nb in adj[node]:
+                if not visited[nb]:
+                    if dfs(nb):
+                        return True
+                elif path_visited[nb]:  # back edge to current path
+                    return True
+            path_visited[node] = False  # leave path (become BLACK)
+            return False
+
+        for i in range(V):
+            if not visited[i] and dfs(i):
+                return True
+        return False
+```
+
+---
+
+# Bipartite graph
+
+A graph is bipartite if its nodes can be split into two sets so every edge goes between the sets (equivalently: **2-colorable** with no adjacent nodes sharing a color).
+
+```
+bipartite (even cycle)          not bipartite (odd cycle)
+  A ─── B                         1 ─── 2
+  │     │                         │   ╱
+  D ─── C                         └── 3
+  color: A,C = 0; B,D = 1         1-2-3-1 has length 3 → impossible
+```
+
+**Properties**
+
+- Linear path / tree → always bipartite.
+- Even-length cycle → bipartite.
+- Odd-length cycle → **not** bipartite.
+- Equivalent check: no odd cycle exists.
+
+**Algorithm:** BFS or DFS coloring. Assign color `0` to start, flip (`1 - color`) for each neighbor. Conflict (neighbor already same color) → not bipartite. Loop all nodes (graph may be disconnected).
+
+- **Time** `O(n + E)` | **Space** `O(n)` (`color` + queue / stack)
+
+### Problem 10: Is Graph Bipartite ([LC 785](https://leetcode.com/problems/is-graph-bipartite/))
+
+`graph[i]` = neighbors of node `i` (adjacency list, undirected). Return whether the graph is bipartite.
+
+```
+graph = [[1,3],[0,2],[1,3],[0,2]]
+
+  0 ─── 1
+  │     │
+  3 ─── 2     even cycle → True (color 0/1 alternate)
+```
+
+- Pattern: **2-coloring** via BFS or DFS.
+- `color[i] = -1` means uncolored. Start each component with color `0`.
+- Neighbor uncolored → assign opposite color and continue. Neighbor same color → `False`.
+- Use `1 - color[node]` (not `not color[node]`) so colors stay `0`/`1` ints.
+- **Time** `O(n + E)` | **Space** `O(n)`
+
+**BFS**
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def isBipartite(self, graph: List[List[int]]) -> bool:
+        n = len(graph)
+        color = [-1] * n  # -1 = uncolored, 0/1 = two sides
+
+        for start in range(n):
+            if color[start] != -1:
+                continue
+            q = deque([start])
+            color[start] = 0
+            while q:
+                node = q.popleft()
+                for nb in graph[node]:
+                    if color[nb] == -1:
+                        color[nb] = 1 - color[node]  # opposite side
+                        q.append(nb)
+                    elif color[nb] == color[node]:  # same side conflict
+                        return False
+        return True
+```
+
+**DFS**
+
+```python
+from typing import List
+
+class Solution:
+    def isBipartite(self, graph: List[List[int]]) -> bool:
+        n = len(graph)
+        color = [-1] * n
+
+        def dfs(node, c):
+            color[node] = c
+            for nb in graph[node]:
+                if color[nb] == -1:
+                    if not dfs(nb, 1 - c):  # opposite side
+                        return False
+                elif color[nb] == c:  # same side conflict
+                    return False
+            return True
+
+        for start in range(n):
+            if color[start] == -1 and not dfs(start, 0):
+                return False
+        return True
 ```
