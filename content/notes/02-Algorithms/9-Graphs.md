@@ -1,11 +1,11 @@
 ---
 title: "Graphs"
 date: 2026-08-18
-summary: "Graph types, representations, connected components, BFS/DFS, cycle detection, bipartite check, and related problems."
+summary: "Graph types, representations, connected components, BFS/DFS, cycle detection, bipartite check, topological sort (DFS + Kahn), and related problems."
 tags: [Graphs, DSA, Algorithms]
 ---
 
-Graph basics: types, degree rules, and the two representations every graph problem starts from.
+Graph basics: types, degree rules, representations, traversals, cycle/bipartite checks, and topological sort.
 
 ---
 
@@ -232,7 +232,7 @@ def dfs_recursive(adj, src, visited=None):
 | "minimum steps", "shortest path", all edges cost 1     | **BFS**                                               |
 | "level by level", "distance from multiple sources"     | **BFS** (multi-source)                                |
 | "count components", "is connected", flood fill on grid | **DFS or BFS** (same logic, see connected components) |
-| "detect cycle", "topological order", "dependencies"    | **DFS** (3-color cycle detect, post-order topo)       |
+| "detect cycle", "topological order", "dependencies"    | **DFS** (3-color) or **Kahn's** (indegree BFS)        |
 | "explore all paths", backtracking                      | **DFS**                                               |
 | edge weights > 1 or varying                            | **Dijkstra** (not plain BFS)                          |
 | edge weights only 0 or 1                               | **0-1 BFS** with deque (push front for 0, back for 1) |
@@ -566,11 +566,11 @@ def has_cycle_directed(n, adj):
 
 Time `O(n + E)` for all versions. Space `O(n)` (`visited` / `color` + stack / queue).
 
-| Problem signal                                      | Use                             |
-| --------------------------------------------------- | ------------------------------- |
-| undirected graph, "has a cycle?"                    | parent-based BFS/DFS            |
-| directed graph, "has a cycle?" / invalid topo order | 3-color DFS                     |
-| directed graph, "can finish all courses?"           | topo sort; empty result = cycle |
+| Problem signal                                      | Use                                                         |
+| --------------------------------------------------- | ----------------------------------------------------------- |
+| undirected graph, "has a cycle?"                    | parent-based BFS/DFS                                        |
+| directed graph, "has a cycle?" / invalid topo order | 3-color DFS or Kahn's (`len < V`)                           |
+| directed graph, "can finish all courses?"           | [topo sort](#topological-sorting); incomplete order = cycle |
 
 ---
 
@@ -964,3 +964,275 @@ class Solution:
                 return False
         return True
 ```
+
+---
+
+# Topological sorting
+
+A **topological order** of a **DAG** (directed acyclic graph) is a linear order of nodes such that for every edge `u → v`, `u` appears **before** `v`.
+
+Think: prerequisites. If course `u` must be taken before course `v`, then `u` comes first in the order.
+
+```
+DAG (has a topo order)              Not a DAG (cycle → no topo order)
+
+  0 → 1 → 3                           0 → 1 → 2
+  ↓   ↓                               ↑_______↓
+  2 →─┘                               cycle → impossible
+
+  valid orders: 0,1,2,3  or  0,2,1,3
+  (any order that respects all arrows)
+```
+
+**When it applies**
+
+- Graph must be **directed**.
+- Graph must be **acyclic**. A cycle means mutual dependency → no valid order.
+- Multiple valid orders can exist; any one is fine unless the problem asks for lexicographically smallest, etc.
+
+**Two standard algorithms**
+
+|                | DFS (post-order)                        | Kahn's (BFS + indegree)                                    |
+| -------------- | --------------------------------------- | ---------------------------------------------------------- |
+| Idea           | finish dependents first, then push node | repeatedly take nodes with indegree `0`                    |
+| Detects cycle? | need 3-color / pathVisited separately   | **yes** , if `len(result) < V`, there is a cycle           |
+| Structure      | recursion / stack + result stack        | queue + indegree array                                     |
+| Typical use    | plain topo order                        | Course Schedule, alien dictionary, "detect cycle via topo" |
+
+---
+
+## Method 1: DFS post-order
+
+**Idea:** run DFS. When a node finishes (all its outgoing neighbors are done), push it onto a stack. At the end, reverse the stack → topological order.
+
+Why reverse? The first nodes that finish are the sinks (no outgoing edges left). Sources finish last, so reversing puts sources first.
+
+```
+DFS post-order flow
+
+  start DFS(u)
+       │
+       ▼
+  mark visited
+       │
+       ▼
+  for each nb of u ──► DFS(nb) if unvisited
+       │
+       ▼
+  append u to stack   ← post-order: after all children
+       │
+       ▼
+  after all starts: reverse stack → topo order
+```
+
+```
+example: 0 → 1 → 3
+         ↓   ↓
+         2 →─┘
+
+DFS from 0:
+  visit 0 → 1 → 3 (leaf) → push 3
+              → 2 (leaf) → push 2
+         push 1
+  push 0
+
+  stack (bottom→top): 3, 2, 1, 0
+  reverse / pop:      0, 1, 2, 3   ← topo order
+```
+
+```python
+class Solution:
+    def topoSort(self, V, adj):
+        visited = [False] * V
+        stack = []  # post-order finish times
+
+        def dfs(node):
+            visited[node] = True
+            for nb in adj[node]:
+                if not visited[nb]:
+                    dfs(nb)
+            stack.append(node)  # push after all dependents
+
+        for i in range(V):
+            if not visited[i]:
+                dfs(i)
+
+        # reverse post-order = topological order
+        return stack[::-1]
+```
+
+- Loop all nodes (graph may be disconnected).
+- This version assumes the graph **is** a DAG. To also detect cycles, use 3-color / `pathVisited` (see [Directed cycle](#directed-graph)) and abort if a back edge appears.
+- **Time** `O(V + E)` | **Space** `O(V)` (`visited` + stack + recursion)
+
+---
+
+## Method 2: Kahn's algorithm (BFS + indegree)
+
+**Idea:** nodes with indegree `0` have no prerequisites → safe to place next. Process them in a queue. For each processed node, "remove" its outgoing edges (decrement neighbor indegrees). Newly zero-indegree nodes enter the queue.
+
+```
+Kahn's flow
+
+  compute indegree[v] for all v
+       │
+       ▼
+  enqueue all nodes with indegree == 0
+       │
+       ▼
+  ┌── while queue not empty ──────────────────┐
+  │  pop node → append to result               │
+  │  for each nb:                              │
+  │      indegree[nb] -= 1                     │
+  │      if indegree[nb] == 0 → enqueue nb     │
+  └────────────────────────────────────────────┘
+       │
+       ▼
+  len(result) == V  →  valid topo order
+  len(result) <  V  →  cycle (some nodes never reached indegree 0)
+```
+
+```
+example: 0 → 1 → 3
+         ↓   ↓
+         2 →─┘
+
+indegree: 0:0  1:1  2:1  3:2
+
+step 0: queue = [0]           result = []
+step 1: take 0 → unlock 1,2   queue = [1,2]   result = [0]
+        indegree: 1:0  2:0  3:2
+step 2: take 1 → unlock 3     queue = [2,3]   result = [0,1]
+        indegree: 3:1
+step 3: take 2 → unlock 3     queue = [3]     result = [0,1,2]
+        indegree: 3:0
+step 4: take 3                queue = []      result = [0,1,2,3]
+```
+
+```python
+from collections import deque
+
+class Solution:
+    def topoSort(self, V, adj):
+        indegree = [0] * V
+        for u in range(V):
+            for v in adj[u]:
+                indegree[v] += 1
+
+        q = deque(i for i in range(V) if indegree[i] == 0)
+        result = []
+
+        while q:
+            node = q.popleft()
+            result.append(node)
+            for nb in adj[node]:
+                indegree[nb] -= 1
+                if indegree[nb] == 0:
+                    q.append(nb)
+
+        # if len(result) < V → cycle exists; no full topo order
+        return result
+```
+
+- Built-in **cycle check**: incomplete result means a cycle.
+- Prefer Kahn's when the problem is "can you finish all courses?" / "return order or empty if impossible."
+- **Time** `O(V + E)` | **Space** `O(V)` (`indegree` + queue + result)
+
+---
+
+### DFS vs Kahn
+
+| Problem signal                                     | Reach for                 |
+| -------------------------------------------------- | ------------------------- |
+| "return any topological order" (DAG guaranteed)    | DFS post-order or Kahn's  |
+| "order if possible, else detect cycle / return []" | **Kahn's** (length check) |
+| "Course Schedule", prerequisites                   | Kahn's or 3-color DFS     |
+| already doing DFS cycle detect                     | extend to post-order push |
+
+---
+
+### Problem 11: Course Schedule ([LC 207](https://leetcode.com/problems/course-schedule/))
+
+`numCourses` courses labeled `0..n-1`. `prerequisites[i] = [a, b]` means take `b` before `a` (edge `b → a`). Return whether you can finish all courses.
+
+```
+n = 2, prerequisites = [[1,0]]     n = 2, prerequisites = [[1,0],[0,1]]
+
+  0 → 1   (take 0 before 1)          0 ⇄ 1   cycle
+  True                               False
+```
+
+- Pattern: **topo sort on a DAG**. Build directed adj from `b → a`. If a full order exists → `True`.
+- Kahn's: if `len(result) == numCourses` → can finish. Else cycle → `False`.
+- Equivalent: directed cycle DFS; cycle → cannot finish.
+- **Time** `O(V + E)` | **Space** `O(V + E)`
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def canFinish(self, numCourses: int, prerequisites: List[List[int]]) -> bool:
+        adj = [[] for _ in range(numCourses)]
+        indegree = [0] * numCourses
+        for a, b in prerequisites:  # b before a → edge b → a
+            adj[b].append(a)
+            indegree[a] += 1
+
+        q = deque(i for i in range(numCourses) if indegree[i] == 0)
+        taken = 0
+        while q:
+            node = q.popleft()
+            taken += 1
+            for nb in adj[node]:
+                indegree[nb] -= 1
+                if indegree[nb] == 0:
+                    q.append(nb)
+
+        return taken == numCourses  # incomplete → cycle
+```
+
+### Problem 12: Course Schedule II ([LC 210](https://leetcode.com/problems/course-schedule-ii/))
+
+Same setup as Course Schedule, but return **any** valid order of courses. If impossible, return `[]`.
+
+```
+n = 4, prerequisites = [[1,0],[2,0],[3,1],[3,2]]
+
+  0 → 1 → 3
+  ↓   ↑
+  2 ──┘
+
+  one valid order: [0,1,2,3]  (or [0,2,1,3])
+```
+
+- Pattern: Kahn's, but **return the order** instead of a boolean.
+- Empty list when `len(result) < numCourses` (cycle).
+- **Time** `O(V + E)` | **Space** `O(V + E)`
+
+```python
+from collections import deque
+from typing import List
+
+class Solution:
+    def findOrder(self, numCourses: int, prerequisites: List[List[int]]) -> List[int]:
+        adj = [[] for _ in range(numCourses)]
+        indegree = [0] * numCourses
+        for a, b in prerequisites:
+            adj[b].append(a)
+            indegree[a] += 1
+
+        q = deque(i for i in range(numCourses) if indegree[i] == 0)
+        order = []
+        while q:
+            node = q.popleft()
+            order.append(node)
+            for nb in adj[node]:
+                indegree[nb] -= 1
+                if indegree[nb] == 0:
+                    q.append(nb)
+
+        return order if len(order) == numCourses else []
+```
+
+**vs Course Schedule:** same Kahn's template. 207 checks `taken == n`; 210 returns the order (or `[]`).
