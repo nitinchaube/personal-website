@@ -1151,33 +1151,78 @@ class Solution:
 
 ---
 
-### Problem 11: Course Schedule ([LC 207](https://leetcode.com/problems/course-schedule/))
+### Problem 11: Detect Cycle in Directed Graph via Topo Sort ([TUF](https://takeuforward.org/practice/dsa/detect-a-cycle-in-a-directed-graph))
+
+Given `N` nodes and a directed adjacency list, return whether the graph has a cycle — using **Kahn's** instead of 3-color DFS.
+
+```
+no cycle (full topo)              cycle (stuck)
+
+  0 → 1 → 2                         0 → 1 → 2
+                                    ↑_______↓
+
+  indegree eventually all hit 0     nodes in the cycle never reach
+  → len(result) == N → False        indegree 0 → len(result) < N → True
+```
+
+- Pattern: run [Kahn's](#method-2-kahns-algorithm-bfs--indegree). If you cannot order all nodes, a cycle exists.
+- Key check: `len(result) == N` → no cycle (`False`). `len(result) < N` → cycle (`True`).
+- Same idea as [Problem 9](#problem-9-detect-cycle-in-a-directed-graph-gfg) (DFS pathVisited), different tool.
+- **Time** `O(N + E)` | **Space** `O(N)` (`indegree` + queue + result)
+
+```python
+from collections import deque
+
+class Solution:
+    def isCyclic(self, N, adj):
+        indegree = [0] * N
+        for u in range(N):
+            for v in adj[u]:
+                indegree[v] += 1
+
+        q = deque(i for i in range(N) if indegree[i] == 0)
+        result = []
+        while q:
+            node = q.popleft()
+            result.append(node)
+            for nb in adj[node]:
+                indegree[nb] -= 1
+                if indegree[nb] == 0:
+                    q.append(nb)
+
+        return len(result) != N  # incomplete order → cycle
+```
+
+---
+
+### Problem 12: Course Schedule ([LC 207](https://leetcode.com/problems/course-schedule/))
 
 `numCourses` courses labeled `0..n-1`. `prerequisites[i] = [a, b]` means take `b` before `a` (edge `b → a`). Return whether you can finish all courses.
 
 ```
-n = 2, prerequisites = [[1,0]]     n = 2, prerequisites = [[1,0],[0,1]]
+n = 2, prereq = [[1,0]]          n = 2, prereq = [[1,0],[0,1]]
 
-  0 → 1   (take 0 before 1)          0 ⇄ 1   cycle
-  True                               False
+  0 → 1   (take 0 before 1)        0 ⇄ 1   cycle
+  True                             False
 ```
 
-- Pattern: **topo sort on a DAG**. Build directed adj from `b → a`. If a full order exists → `True`.
-- Kahn's: if `len(result) == numCourses` → can finish. Else cycle → `False`.
-- Equivalent: directed cycle DFS; cycle → cannot finish.
+- Pattern: **topo sort / cycle detect** on a DAG of prerequisites.
+- Build directed adj: for each `[a, b]`, edge `b → a` (prerequisite points to the course).
+- Kahn's: if `len(res) == numCourses` → can finish. Else cycle → `False`.
+- Equivalent to Problem 11 with "courses" instead of abstract nodes.
 - **Time** `O(V + E)` | **Space** `O(V + E)`
 
 ```python
-from collections import deque
+from collections import deque, defaultdict
 from typing import List
 
 class Solution:
     def canFinish(self, numCourses: int, prerequisites: List[List[int]]) -> bool:
-        adj = [[] for _ in range(numCourses)]
+        adj = defaultdict(list)
         indegree = [0] * numCourses
-        for a, b in prerequisites:  # b before a → edge b → a
-            adj[b].append(a)
-            indegree[a] += 1
+        for course, prereq in prerequisites:  # take prereq before course
+            adj[prereq].append(course)
+            indegree[course] += 1
 
         q = deque(i for i in range(numCourses) if indegree[i] == 0)
         taken = 0
@@ -1192,35 +1237,37 @@ class Solution:
         return taken == numCourses  # incomplete → cycle
 ```
 
-### Problem 12: Course Schedule II ([LC 210](https://leetcode.com/problems/course-schedule-ii/))
+---
+
+### Problem 13: Course Schedule II ([LC 210](https://leetcode.com/problems/course-schedule-ii/))
 
 Same setup as Course Schedule, but return **any** valid order of courses. If impossible, return `[]`.
 
 ```
-n = 4, prerequisites = [[1,0],[2,0],[3,1],[3,2]]
+n = 4, prereq = [[1,0],[2,0],[3,1],[3,2]]
 
   0 → 1 → 3
   ↓   ↑
   2 ──┘
 
-  one valid order: [0,1,2,3]  (or [0,2,1,3])
+  one valid order: [0, 1, 2, 3]  (or [0, 2, 1, 3])
 ```
 
-- Pattern: Kahn's, but **return the order** instead of a boolean.
-- Empty list when `len(result) < numCourses` (cycle).
+- Pattern: Kahn's again — keep the order instead of only a boolean.
+- Empty list when `len(res) < numCourses` (cycle).
 - **Time** `O(V + E)` | **Space** `O(V + E)`
 
 ```python
-from collections import deque
+from collections import deque, defaultdict
 from typing import List
 
 class Solution:
     def findOrder(self, numCourses: int, prerequisites: List[List[int]]) -> List[int]:
-        adj = [[] for _ in range(numCourses)]
+        adj = defaultdict(list)
         indegree = [0] * numCourses
-        for a, b in prerequisites:
-            adj[b].append(a)
-            indegree[a] += 1
+        for course, prereq in prerequisites:
+            adj[prereq].append(course)
+            indegree[course] += 1
 
         q = deque(i for i in range(numCourses) if indegree[i] == 0)
         order = []
@@ -1235,4 +1282,10 @@ class Solution:
         return order if len(order) == numCourses else []
 ```
 
-**vs Course Schedule:** same Kahn's template. 207 checks `taken == n`; 210 returns the order (or `[]`).
+**Same Kahn template, three outputs**
+
+| Problem | Question                         | Return                          |
+| ------- | -------------------------------- | ------------------------------- |
+| 11      | directed cycle via topo?         | `True` if `len < N`             |
+| 12      | can finish all courses?          | `True` if `len == n`            |
+| 13      | what order to take courses?      | the order, or `[]` if cycle     |
